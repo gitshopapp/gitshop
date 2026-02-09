@@ -1,0 +1,53 @@
+package views
+
+import (
+	"github.com/gitshopapp/gitshop/ui/components/badge"
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/card"
+)
+
+type ShopSelectionItem struct {
+	ID           string
+	RepoFullName string
+	Ready        bool
+	StatusLabel  string
+}
+
+templ ShopSelectionPage(shops []ShopSelectionItem) {
+	@Layout(LayoutProps{
+		Title:       "Select a Storefront",
+		Subtitle:    "Pick the repository you want to manage.",
+		ShowNav:     true,
+	}) {
+		<div class="mx-auto max-w-2xl px-4 sm:px-6">
+			@card.Card() {
+				@card.Header() {
+					@card.Title() { Your Storefronts }
+					@card.Description() { Choose which repository you want to manage right now. }
+				}
+				@card.Content() {
+					<div class="space-y-3">
+						for _, shop := range shops {
+							<form method="POST" action="/admin/shops/select">
+								<input type="hidden" name="shop_id" value={ shop.ID }/>
+								@button.Button(button.Props{Class: "h-auto w-full justify-between text-left px-4 py-5", Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+									<div class="flex w-full items-center justify-between gap-4">
+										<div>
+											<p class="font-medium">{ shop.RepoFullName }</p>
+											<p class="text-sm text-muted-foreground">{ shop.StatusLabel }</p>
+										</div>
+										if shop.Ready {
+											@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Ready }
+										} else {
+											@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { Setup Required }
+										}
+									</div>
+								}
+							</form>
+						}
+					</div>
+				}
+			}
+		</div>
+	}
+}

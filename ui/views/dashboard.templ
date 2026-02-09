@@ -1,0 +1,97 @@
+package views
+
+import (
+	"github.com/gitshopapp/gitshop/internal/db"
+	dashboardcmp "github.com/gitshopapp/gitshop/ui/components/admin/dashboard"
+	"github.com/gitshopapp/gitshop/ui/components/button"
+)
+
+type ProductSummary = dashboardcmp.ProductSummary
+
+type RepoStatus = dashboardcmp.RepoStatus
+
+type TemplateFile = dashboardcmp.TemplateFile
+
+templ DashboardPage(shop *db.Shop, toastPayload *ToastPayload, shopSwitcher *ShopSwitcherProps) {
+	@Layout(LayoutProps{
+		Title:        "Orders Dashboard",
+		Subtitle:     shop.GitHubRepoFullName,
+		ActiveRoute:  "dashboard",
+		ShowNav:      true,
+		ShowSetupNav: false,
+		ShopSwitcher: shopSwitcher,
+	}) {
+		if toastPayload != nil {
+			@ToastInline(*toastPayload)
+			<script>
+				(function () {
+					function finalizeToast() {
+						var root = document.getElementById("toast-root");
+						if (root) {
+							document.querySelectorAll("[data-tui-toast]").forEach(function (toast) {
+								if (!root.contains(toast)) {
+									root.appendChild(toast);
+								}
+							});
+						}
+						if (window.history && window.history.replaceState) {
+							var url = new URL(window.location.href);
+							url.searchParams.delete("toast");
+							window.history.replaceState({}, "", url.toString());
+						}
+					}
+					if (document.readyState === "loading") {
+						document.addEventListener("DOMContentLoaded", finalizeToast);
+					} else {
+						finalizeToast();
+					}
+				})();
+			</script>
+		}
+		<div class="space-y-6">
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div class="rounded-full border border-border/60 bg-card px-4 py-2 text-sm text-muted-foreground">
+					Orders are created when customers submit a GitHub issue.
+				</div>
+				@button.Button(button.Props{
+					Variant: button.VariantOutline,
+					Href:    "https://github.com/" + shop.GitHubRepoFullName,
+					Target:  "_blank",
+					Attributes: templ.Attributes{
+						"rel": "noopener",
+					},
+				}) {
+					View Repository
+				}
+			</div>
+
+			<div hx-get="/admin/dashboard/storefront" hx-trigger="load" hx-swap="outerHTML" hx-indicator="#dashboard-storefront-indicator">
+				<div id="dashboard-storefront-indicator" class="htmx-indicator">
+					@DashboardStorefrontSkeleton()
+				</div>
+			</div>
+
+			<div hx-get="/admin/dashboard/orders" hx-trigger="load" hx-swap="outerHTML" hx-indicator="#dashboard-orders-indicator">
+				<div id="dashboard-orders-indicator" class="htmx-indicator">
+					@DashboardOrdersSkeleton()
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ DashboardStorefrontSection(status *RepoStatus) {
+	@dashboardcmp.StorefrontSection(status)
+}
+
+templ DashboardOrdersSection(orders []*db.Order) {
+	@dashboardcmp.OrdersSection(orders)
+}
+
+templ DashboardStorefrontSkeleton() {
+	@dashboardcmp.StorefrontSkeleton()
+}
+
+templ DashboardOrdersSkeleton() {
+	@dashboardcmp.OrdersSkeleton()
+}

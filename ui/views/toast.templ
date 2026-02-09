@@ -1,0 +1,51 @@
+package views
+
+import "github.com/gitshopapp/gitshop/ui/components/toast"
+
+type ToastPayload struct {
+	Title       string
+	Description string
+	Variant     toast.Variant
+	Duration    int
+}
+
+const (
+	ToastVariantDefault = toast.VariantDefault
+	ToastVariantSuccess = toast.VariantSuccess
+	ToastVariantError   = toast.VariantError
+	ToastVariantWarning = toast.VariantWarning
+	ToastVariantInfo    = toast.VariantInfo
+)
+
+templ ToastInline(payload ToastPayload) {
+	{{ duration := payload.Duration }}
+	if duration == 0 {
+		{{ duration = 4000 }}
+	}
+	@toast.Toast(toast.Props{
+		Title:         payload.Title,
+		Description:   payload.Description,
+		Variant:       payload.Variant,
+		Position:      toast.PositionBottomRight,
+		Duration:      duration,
+		Dismissible:   true,
+		ShowIndicator: true,
+		Icon:          true,
+	})
+}
+
+templ ToastOOB(payload ToastPayload) {
+	<div id="toast-root" hx-swap-oob="beforeend">
+		@ToastInline(payload)
+	</div>
+}
+
+// Convenience helpers
+
+templ ToastSuccessOOB(title, description string) {
+	@ToastOOB(ToastPayload{Title: title, Description: description, Variant: toast.VariantSuccess})
+}
+
+templ ToastErrorOOB(title, description string) {
+	@ToastOOB(ToastPayload{Title: title, Description: description, Variant: toast.VariantError})
+}

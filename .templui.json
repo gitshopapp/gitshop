@@ -1,0 +1,7 @@
+{
+  "componentsDir": "ui/components",
+  "utilsDir": "ui/utils",
+  "moduleName": "github.com/gitshopapp/gitshop",
+  "jsDir": "ui/assets/js",
+  "jsPublicPath": "/assets/js"
+}

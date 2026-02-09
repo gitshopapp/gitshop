@@ -1,0 +1,615 @@
+package dashboard
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/gitshopapp/gitshop/internal/db"
+	"github.com/gitshopapp/gitshop/ui/components/accordion"
+	"github.com/gitshopapp/gitshop/ui/components/badge"
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/card"
+	"github.com/gitshopapp/gitshop/ui/components/dialog"
+	"github.com/gitshopapp/gitshop/ui/components/input"
+	"github.com/gitshopapp/gitshop/ui/components/label"
+	"github.com/gitshopapp/gitshop/ui/components/selectbox"
+	"github.com/gitshopapp/gitshop/ui/components/skeleton"
+	"github.com/gitshopapp/gitshop/ui/components/table"
+)
+
+type ProductSummary struct {
+	SKU        string
+	Name       string
+	PriceCents int
+	Active     bool
+}
+
+type RepoStatus struct {
+	YAMLExists               bool
+	YAMLValid                bool
+	YAMLURL                  string
+	YAMLLastUpdatedLabel     string
+	TemplateExists           bool
+	TemplateValid            bool
+	TemplateURL              string
+	TemplateLastUpdatedLabel string
+	TemplateCount            int
+	TemplateFiles            []TemplateFile
+	TemplateMissingSKUs      []string
+	TemplateExtraSKUs        []string
+	TemplatePriceMismatches  []string
+	TemplateOptionMismatches []string
+	TemplateSyncAvailable    bool
+	TemplateSyncMessage      string
+	Products                 []ProductSummary
+	DebugFilesChecked        []string
+}
+
+type TemplateFile struct {
+	Name  string
+	URL   string
+	Valid bool
+}
+
+templ StorefrontSection(status *RepoStatus) {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Storefront Status }
+			@card.Description() { Repository health checks for GitShop ordering. }
+		}
+		@card.Content() {
+			if status == nil {
+				<div class="text-sm text-muted-foreground">Status data is unavailable.</div>
+			} else if isStorefrontReady(status) {
+				@storefrontReady(status)
+			} else {
+				@storefrontNeedsAttention(status)
+			}
+		}
+	}
+}
+
+func isStorefrontReady(status *RepoStatus) bool {
+	if status == nil {
+		return false
+	}
+	return status.YAMLExists && status.YAMLValid && status.TemplateExists && status.TemplateValid && len(status.TemplateExtraSKUs) == 0 && len(status.TemplatePriceMismatches) == 0 && len(status.TemplateOptionMismatches) == 0
+}
+
+templ storefrontReady(status *RepoStatus) {
+	@accordion.Accordion(accordion.Props{Class: "rounded-xl border border-border/60 bg-muted/20 px-4"}) {
+		@accordion.Item(accordion.ItemProps{Class: "border-0"}) {
+			@accordion.Trigger(accordion.TriggerProps{Class: "py-3 text-sm font-medium hover:no-underline"}) {
+				<span>All storefront checks are green</span>
+			}
+			@accordion.Content() {
+				<div class="mt-1 grid gap-4 md:grid-cols-3">
+					@yamlCard(status, true)
+					@templateCard(status, true)
+					@catalogCard(status.Products)
+				</div>
+			}
+		}
+	}
+}
+
+templ storefrontNeedsAttention(status *RepoStatus) {
+	@accordion.Accordion(accordion.Props{Class: "rounded-xl border border-border/60 bg-muted/20 px-4"}) {
+		@accordion.Item(accordion.ItemProps{
+			Class: "border-0",
+			Attributes: templ.Attributes{
+				"open": "open",
+			},
+		}) {
+			@accordion.Trigger(accordion.TriggerProps{Class: "py-3 text-sm font-medium hover:no-underline"}) {
+				<span>Storefront needs attention</span>
+			}
+			@accordion.Content() {
+				<div class="mt-1 grid gap-4 md:grid-cols-3">
+					@yamlCard(status, false)
+					@templateCard(status, false)
+					@catalogCard(status.Products)
+				</div>
+			}
+		}
+	}
+}
+
+templ yamlCard(status *RepoStatus, strictReady bool) {
+	<div class="rounded-xl border border-border/60 bg-background p-4">
+		<p class="text-sm font-medium">gitshop.yaml</p>
+		<div class="mt-2 flex items-center gap-2">
+			if strictReady {
+				@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Valid }
+			} else if status.YAMLExists && status.YAMLValid {
+				@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Valid }
+			} else if status.YAMLExists {
+				@badge.Badge(badge.Props{Variant: badge.VariantDestructive}) { Invalid }
+			} else {
+				@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { Missing }
+			}
+			if status.YAMLLastUpdatedLabel != "" {
+				<span class="text-xs text-muted-foreground">Updated { status.YAMLLastUpdatedLabel }</span>
+			}
+		</div>
+		<p class="mt-2 text-xs text-muted-foreground">Defines catalog, pricing, and shipping.</p>
+		if status.YAMLURL != "" {
+			<a class="mt-3 inline-flex text-xs font-medium text-primary hover:underline" href={ templ.SafeURL(status.YAMLURL) } target="_blank">
+				View gitshop.yaml
+			</a>
+		}
+	</div>
+}
+
+templ templateCard(status *RepoStatus, strictReady bool) {
+	<div class="rounded-xl border border-border/60 bg-background p-4">
+		<p class="text-sm font-medium">Order Template</p>
+		<div class="mt-2 flex items-center gap-2">
+			if strictReady {
+				@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Valid }
+			} else if status.TemplateExists && status.TemplateValid {
+				@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Valid }
+			} else if status.TemplateExists {
+				@badge.Badge(badge.Props{Variant: badge.VariantDestructive}) { Needs Update }
+			} else {
+				@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { Missing }
+			}
+			if status.TemplateLastUpdatedLabel != "" {
+				<span class="text-xs text-muted-foreground">Updated { status.TemplateLastUpdatedLabel }</span>
+			}
+		</div>
+		<p class="mt-2 text-xs text-muted-foreground">Issue form customers use to place orders.</p>
+		if status.TemplateCount > 1 {
+			<p class="mt-2 text-xs text-muted-foreground">Templates found: { fmt.Sprintf("%d", status.TemplateCount) }</p>
+		}
+		if len(status.TemplateFiles) > 0 {
+			<ul class="mt-3 space-y-1 text-xs">
+				for _, file := range status.TemplateFiles {
+					<li class="flex items-center gap-2">
+						<a class="text-primary hover:underline" href={ templ.SafeURL(file.URL) } target="_blank">
+							{ file.Name }
+						</a>
+						if strictReady || file.Valid {
+							<span class="text-emerald-600">Valid</span>
+						} else {
+							<span class="text-muted-foreground">Needs update</span>
+						}
+					</li>
+				}
+			</ul>
+		}
+		if !strictReady {
+			if len(status.TemplateExtraSKUs) > 0 {
+				<p class="mt-2 text-xs text-destructive">Unknown SKUs: { strings.Join(status.TemplateExtraSKUs, ", ") }</p>
+			}
+			if len(status.TemplatePriceMismatches) > 0 {
+				<p class="mt-2 text-xs text-destructive">Price mismatches: { strings.Join(status.TemplatePriceMismatches, ", ") }</p>
+			}
+			if len(status.TemplateOptionMismatches) > 0 {
+				<p class="mt-2 text-xs text-destructive">Option mismatches: { strings.Join(status.TemplateOptionMismatches, ", ") }</p>
+			}
+			{{ needsSync := templateNeedsSync(status) }}
+			if needsSync {
+				if status.TemplateSyncAvailable {
+					<form method="POST" action="/admin/template/sync" data-loading="true" class="mt-3">
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							Sync Template
+						}
+					</form>
+				} else if status.TemplateSyncMessage != "" {
+					<p class="mt-3 text-sm text-muted-foreground">{ status.TemplateSyncMessage }</p>
+				}
+			}
+		}
+	</div>
+}
+
+func templateNeedsSync(status *RepoStatus) bool {
+	if status == nil {
+		return false
+	}
+	return len(status.TemplatePriceMismatches) > 0 || len(status.TemplateExtraSKUs) > 0 || len(status.TemplateOptionMismatches) > 0 || !status.TemplateValid
+}
+
+templ catalogCard(products []ProductSummary) {
+	<div class="rounded-xl border border-border/60 bg-background p-4">
+		<p class="text-sm font-medium">Catalog Summary</p>
+		if len(products) == 0 {
+			<p class="mt-2 text-xs text-muted-foreground">No active products found.</p>
+		} else {
+			<ul class="mt-2 space-y-2 text-xs">
+				for _, product := range products {
+					<li class="flex items-center justify-between">
+						<span class="font-medium">{ product.Name } <span class="text-muted-foreground">({ product.SKU })</span></span>
+						<span class="text-muted-foreground">${ fmt.Sprintf("%.2f", float64(product.PriceCents)/100) }</span>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+templ OrdersSection(orders []*db.Order) {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Recent Orders }
+			@card.Description() { Update fulfillment and notify customers. }
+		}
+		@card.Content() {
+			if len(orders) == 0 {
+				<div class="py-12 text-center text-muted-foreground">
+					No orders yet. Once a customer places an order, it will appear here.
+				</div>
+			} else {
+				<div class="overflow-x-auto">
+					@table.Table() {
+						@table.Header() {
+							@table.Row() {
+								@table.Head() { Order }
+								@table.Head() { Product }
+								@table.Head() { Customer }
+								@table.Head() { Status }
+								@table.Head() { Total }
+								@table.Head() { Stripe }
+								@table.Head() { Action }
+							}
+						}
+						@table.Body() {
+							for _, order := range orders {
+								@orderRow(order)
+							}
+						}
+					}
+				</div>
+			}
+		}
+	}
+	@shippingProviderScript()
+}
+
+templ orderRow(order *db.Order) {
+	@table.Row() {
+		@table.Cell() {
+			<a href={ templ.SafeURL(order.GitHubIssueURL) } class="text-primary hover:underline" target="_blank">
+				#{ fmt.Sprintf("%d", order.OrderNumber) }
+			</a>
+		}
+		@table.Cell() { { order.SKU } }
+		@table.Cell() { { order.GitHubUsername } }
+		@table.Cell() {
+			@orderBadge(order.Status)
+			if order.Status == db.StatusPaymentFailed && order.FailureReason != "" {
+				<p class="mt-1 text-xs text-destructive">{ humanizeFailureReason(order.FailureReason) }</p>
+			}
+		}
+		@table.Cell() { ${ fmt.Sprintf("%.2f", float64(order.TotalCents)/100) } }
+		@table.Cell() {
+			@orderStripeCell(order)
+		}
+		@table.Cell() {
+			@orderActionCell(order)
+		}
+	}
+}
+
+templ orderStripeCell(order *db.Order) {
+	{{ stripeURL := stripeDashboardURL(order) }}
+	if stripeURL != "" {
+		<a href={ templ.SafeURL(stripeURL) } class="text-primary hover:underline text-sm" target="_blank" rel="noopener">
+			Open in Stripe
+		</a>
+	} else {
+		<span class="text-sm text-muted-foreground">—</span>
+	}
+}
+
+templ orderActionCell(order *db.Order) {
+	if order.Status == db.StatusPaid || order.Status == db.StatusShipped {
+		@shipDialog(order)
+	} else {
+		<span class="text-sm text-muted-foreground">—</span>
+	}
+}
+
+templ shippingProviderScript() {
+	<script>
+		(function () {
+			function syncShippingProvider(form) {
+				if (!form) return;
+				var select = form.querySelector("[data-shipping-provider-select]");
+				var otherField = form.querySelector("[data-carrier-other-field]");
+				var otherInput = form.querySelector("[data-carrier-other-input]");
+				if (!select || !otherField || !otherInput) return;
+
+				var isOther = (select.value || "").toLowerCase() === "other";
+				otherField.classList.toggle("hidden", !isOther);
+				otherInput.disabled = !isOther;
+				otherInput.required = isOther;
+
+				if (!isOther) {
+					otherInput.removeAttribute("aria-invalid");
+					var msg = form.querySelector('[data-error-for="carrier_other"]');
+					if (msg) {
+						msg.textContent = "";
+						msg.classList.add("hidden");
+					}
+				}
+			}
+
+			function syncAll(root) {
+				if (!root || typeof root.querySelectorAll !== "function") return;
+				root.querySelectorAll("[data-shipping-provider-form]").forEach(function (form) {
+					syncShippingProvider(form);
+				});
+			}
+
+			if (!window.__gitshopShippingProviderBound) {
+				window.__gitshopShippingProviderBound = true;
+				document.addEventListener("change", function (event) {
+					var target = event.target;
+					if (!target || !target.matches("[data-shipping-provider-select]")) return;
+					var form = target.closest("[data-shipping-provider-form]");
+					syncShippingProvider(form);
+				});
+				document.addEventListener("htmx:afterSwap", function (event) {
+					syncAll(event && event.target ? event.target : document);
+				});
+			}
+
+			if (document.readyState === "loading") {
+				document.addEventListener("DOMContentLoaded", function () {
+					syncAll(document);
+				});
+			} else {
+				syncAll(document);
+			}
+		})();
+	</script>
+}
+
+templ StorefrontSkeleton() {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Storefront Status }
+			@card.Description() { Repository health checks for GitShop ordering. }
+		}
+		@card.Content() {
+			<div class="space-y-4" aria-busy="true">
+				@skeleton.Skeleton(skeleton.Props{Class: "h-4 w-40"})
+				<div class="grid gap-4 md:grid-cols-3">
+					<div class="rounded-xl border border-border/60 bg-background p-4 space-y-2">
+						@skeleton.Skeleton(skeleton.Props{Class: "h-4 w-24"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-32"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-40"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-28"})
+					</div>
+					<div class="rounded-xl border border-border/60 bg-background p-4 space-y-2">
+						@skeleton.Skeleton(skeleton.Props{Class: "h-4 w-28"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-36"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-40"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-32"})
+					</div>
+					<div class="rounded-xl border border-border/60 bg-background p-4 space-y-2">
+						@skeleton.Skeleton(skeleton.Props{Class: "h-4 w-28"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-36"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-32"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-28"})
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
+templ OrdersSkeleton() {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Recent Orders }
+			@card.Description() { Update fulfillment and notify customers. }
+		}
+		@card.Content() {
+			<div class="space-y-4" aria-busy="true">
+				@skeleton.Skeleton(skeleton.Props{Class: "h-4 w-32"})
+				<div class="rounded-lg border border-border/60">
+					<div class="grid grid-cols-7 gap-4 border-b border-border/60 px-4 py-3">
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-12"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-16"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-20"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-10"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+						@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-12"})
+					</div>
+					<div class="space-y-3 px-4 py-3">
+						<div class="grid grid-cols-7 gap-4">
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-10"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-24"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-16"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-12"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-10"})
+						</div>
+						<div class="grid grid-cols-7 gap-4">
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-12"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-20"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-20"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-12"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-10"})
+						</div>
+						<div class="grid grid-cols-7 gap-4">
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-28"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-20"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-16"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-12"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-10"})
+						</div>
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
+templ orderBadge(status db.OrderStatus) {
+	switch status {
+	case db.StatusPendingPayment:
+		@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { Pending Payment }
+	case db.StatusPaid:
+		@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Paid }
+	case db.StatusShipped:
+		@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Shipped }
+	case db.StatusDelivered:
+		@badge.Badge(badge.Props{Variant: badge.VariantDefault}) { Delivered }
+	case db.StatusPaymentFailed:
+		@badge.Badge(badge.Props{Variant: badge.VariantDestructive}) { Failed }
+	case db.StatusRefunded:
+		@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) { Refunded }
+	default:
+		@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
+			{ string(status) }
+		}
+	}
+}
+
+func stripeDashboardURL(order *db.Order) string {
+	if order == nil {
+		return ""
+	}
+	if order.StripePaymentIntentID != "" {
+		return "https://dashboard.stripe.com/payments/" + order.StripePaymentIntentID
+	}
+	if order.StripeCheckoutSessionID != "" {
+		return "https://dashboard.stripe.com/checkout/sessions/" + order.StripeCheckoutSessionID
+	}
+	return ""
+}
+
+func humanizeFailureReason(reason string) string {
+	switch reason {
+	case "stripe_checkout_failed":
+		return "Checkout session could not be created."
+	case "payment_intent_failed":
+		return "Stripe reported a payment failure."
+	default:
+		return reason
+	}
+}
+
+templ shipDialog(order *db.Order) {
+	{{ dialogID := fmt.Sprintf("ship-order-%s", order.ID.String()) }}
+	{{ trackingID := fmt.Sprintf("tracking-number-%s", order.ID.String()) }}
+	{{ providerID := fmt.Sprintf("shipping-provider-%s", order.ID.String()) }}
+	{{ carrierOtherID := fmt.Sprintf("carrier-other-%s", order.ID.String()) }}
+	{{ actionLabel := "Mark Shipped" }}
+	if order.Status == db.StatusShipped {
+		{{ actionLabel = "Update Shipment" }}
+	}
+	{{ trackingValue := "" }}
+	if order.TrackingNumber != "" {
+		{{ trackingValue = order.TrackingNumber }}
+	}
+	{{ carrierValue := "" }}
+	if order.Carrier != "" {
+		{{ carrierValue = strings.TrimSpace(order.Carrier) }}
+	}
+	{{ carrierProviderValue := "usps" }}
+	{{ carrierOtherValue := "" }}
+	if carrierValue != "" {
+		{{ normalizedCarrier := strings.ToLower(strings.TrimSpace(carrierValue)) }}
+		if normalizedCarrier == "usps" || normalizedCarrier == "united states postal service" || normalizedCarrier == "unitedstatespostalservice" {
+			{{ carrierProviderValue = "usps" }}
+		} else if normalizedCarrier == "fedex" || normalizedCarrier == "federal express" || normalizedCarrier == "federalexpress" {
+			{{ carrierProviderValue = "fedex" }}
+		} else if normalizedCarrier == "ups" || normalizedCarrier == "united parcel service" || normalizedCarrier == "unitedparcelservice" {
+			{{ carrierProviderValue = "ups" }}
+		} else {
+			{{ carrierProviderValue = "other" }}
+			{{ carrierOtherValue = carrierValue }}
+		}
+	}
+	{{ carrierOtherClass := "hidden" }}
+	{{ carrierOtherInputAttrs := templ.Attributes{
+		"disabled":                 "true",
+		"data-carrier-other-input": "true",
+	} }}
+	if carrierProviderValue == "other" {
+		{{ carrierOtherClass = "" }}
+		{{ carrierOtherInputAttrs = templ.Attributes{
+			"required":                "true",
+			"data-carrier-other-input": "true",
+		} }}
+	}
+	@dialog.Dialog(dialog.Props{ID: dialogID}) {
+		@dialog.Trigger() {
+			@button.Button(button.Props{Variant: button.VariantSecondary, Size: button.SizeSm}) {
+				{ actionLabel }
+			}
+		}
+		@dialog.Content() {
+			@dialog.Header() {
+				@dialog.Title() { Ship Order #{ fmt.Sprintf("%d", order.OrderNumber) } }
+				@dialog.Description() { Add tracking details and notify the customer. }
+			}
+			<form method="POST" action={ templ.SafeURL(fmt.Sprintf("/admin/orders/%s/ship", order.ID.String())) } class="space-y-4" data-inline-errors="true" data-shipping-provider-form novalidate>
+				<div>
+					@label.Label(label.Props{For: trackingID}) { Tracking Number }
+					@input.Input(input.Props{
+						ID:          trackingID,
+						Name:        "tracking_number",
+						Placeholder: "1Z999AA10123456784",
+						Value:       trackingValue,
+						Attributes:  templ.Attributes{"required": "true"},
+					})
+					<p class="mt-1 text-xs text-destructive hidden" data-error-for="tracking_number"></p>
+				</div>
+				<div>
+					@label.Label(label.Props{For: providerID + "-trigger"}) { Shipping Provider }
+					@selectbox.SelectBox(selectbox.Props{ID: providerID}) {
+						@selectbox.Trigger(selectbox.TriggerProps{
+							ID:   providerID + "-trigger",
+							Name: "shipping_provider",
+							Attributes: templ.Attributes{
+								"data-shipping-provider-select": "true",
+							},
+						}) {
+							@selectbox.Value(selectbox.ValueProps{Placeholder: "Select shipping provider"})
+						}
+						@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+							@selectbox.Item(selectbox.ItemProps{Value: "usps", Selected: carrierProviderValue == "usps"}) { USPS }
+							@selectbox.Item(selectbox.ItemProps{Value: "fedex", Selected: carrierProviderValue == "fedex"}) { FedEx }
+							@selectbox.Item(selectbox.ItemProps{Value: "ups", Selected: carrierProviderValue == "ups"}) { UPS }
+							@selectbox.Item(selectbox.ItemProps{Value: "other", Selected: carrierProviderValue == "other"}) { Other }
+						}
+					}
+					<p class="mt-1 text-xs text-destructive hidden" data-error-for="shipping_provider"></p>
+				</div>
+				<div class={ carrierOtherClass } data-carrier-other-field>
+					@label.Label(label.Props{For: carrierOtherID}) { Other Shipping Provider }
+					@input.Input(input.Props{
+						ID:          carrierOtherID,
+						Name:        "carrier_other",
+						Placeholder: "DHL, OnTrac, LaserShip",
+						Value:       carrierOtherValue,
+						Attributes:  carrierOtherInputAttrs,
+					})
+					<p class="mt-1 text-xs text-destructive hidden" data-error-for="carrier_other"></p>
+				</div>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantGhost, Type: button.TypeButton}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{Variant: button.VariantDefault, Type: button.TypeSubmit}) {
+						Confirm Shipment
+					}
+				}
+			</form>
+		}
+	}
+}

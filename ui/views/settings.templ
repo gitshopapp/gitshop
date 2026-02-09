@@ -1,0 +1,44 @@
+package views
+
+import (
+	"github.com/gitshopapp/gitshop/internal/db"
+	settingscmp "github.com/gitshopapp/gitshop/ui/components/admin/settings"
+)
+
+templ SettingsPage(shop *db.Shop, shopSwitcher *ShopSwitcherProps) {
+	@Layout(LayoutProps{
+		Title:        "Settings",
+		Subtitle:     "Manage Stripe and email integrations for this storefront.",
+		ActiveRoute:  "settings",
+		ShowNav:      true,
+		ShowSetupNav: false,
+		ShopSwitcher: shopSwitcher,
+	}) {
+		<div class="space-y-6">
+			@settingscmp.StripeCard(shop.StripeConnectAccountID != "")
+			@settingscmp.EmailCard(shop)
+		</div>
+	}
+}
+
+templ SettingsSuccess(message string) {
+	<div class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+		{ message }
+	</div>
+}
+
+templ SettingsError(message string) {
+	<div class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+		{ message }
+	</div>
+}
+
+templ SettingsResult(message string, success bool) {
+	if success {
+		@SettingsSuccess(message)
+		@ToastSuccessOOB("Settings updated", message)
+	} else {
+		@SettingsError(message)
+		@ToastErrorOOB("Update failed", message)
+	}
+}

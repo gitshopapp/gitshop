@@ -1,0 +1,274 @@
+package views
+
+import (
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/dialog"
+	"github.com/gitshopapp/gitshop/ui/components/input"
+	"github.com/gitshopapp/gitshop/ui/components/popover"
+	"github.com/gitshopapp/gitshop/ui/components/selectbox"
+	"github.com/gitshopapp/gitshop/ui/components/toast"
+	"github.com/gitshopapp/gitshop/ui/utils"
+)
+
+type LayoutProps struct {
+	Title       string
+	Subtitle    string
+	ActiveRoute string
+	ShowNav     bool
+	HideHeader  bool
+	ShowSetupNav bool
+	ShopSwitcher *ShopSwitcherProps
+}
+
+type ShopSwitcherOption struct {
+	ID    string
+	Label string
+}
+
+type ShopSwitcherProps struct {
+	ActiveID string
+	Options  []ShopSwitcherOption
+}
+
+templ Layout(props LayoutProps, children ...templ.Component) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>GitShop</title>
+			<link rel="stylesheet" href={ templ.SafeURL(utils.ScriptURL("/assets/css/app.css")) }/>
+		</head>
+		<body class="min-h-screen bg-background text-foreground antialiased">
+			<div class="min-h-screen">
+				<div class="pointer-events-none fixed inset-0 -z-10">
+					<div class="absolute -top-32 right-[-5%] h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl"></div>
+					<div class="absolute bottom-[-12%] left-[-10%] h-80 w-80 rounded-full bg-sky-200/35 blur-3xl"></div>
+				</div>
+
+				if props.ShowNav {
+					<header class="border-b border-border/60 bg-background/80 backdrop-blur">
+						<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+							<a href="/admin/dashboard" class="flex items-center gap-2 text-lg font-semibold tracking-tight">
+								<span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-foreground text-background text-sm">GS</span>
+								GitShop
+							</a>
+							<nav class="flex items-center gap-2">
+								if props.ShowSetupNav {
+									@button.Button(button.Props{
+										Variant: button.VariantGhost,
+										Href:    "/admin/setup",
+										Class:   utils.TwMerge("text-sm", utils.If(props.ActiveRoute == "setup", "bg-accent text-accent-foreground")),
+									}) { Setup }
+								}
+								@button.Button(button.Props{
+									Variant: button.VariantGhost,
+									Href:    "/admin/dashboard",
+									Class:   utils.TwMerge("text-sm", utils.If(props.ActiveRoute == "dashboard", "bg-accent text-accent-foreground")),
+								}) { Dashboard }
+								@button.Button(button.Props{
+									Variant: button.VariantGhost,
+									Href:    "/admin/settings",
+									Class:   utils.TwMerge("text-sm", utils.If(props.ActiveRoute == "settings", "bg-accent text-accent-foreground")),
+								}) { Settings }
+							</nav>
+							<div class="flex items-center gap-3">
+								if props.ShopSwitcher != nil && len(props.ShopSwitcher.Options) > 1 {
+									<form method="POST" action="/admin/shops/select">
+										<label class="sr-only" for="shop-switcher">Select storefront</label>
+										<select
+											id="shop-switcher"
+											name="shop_id"
+											class="h-9 rounded-md border border-border/60 bg-background px-3 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+											onchange="this.form.submit()"
+										>
+											for _, option := range props.ShopSwitcher.Options {
+												<option value={ option.ID } selected?={ option.ID == props.ShopSwitcher.ActiveID }>{ option.Label }</option>
+											}
+										</select>
+									</form>
+								}
+								@button.Button(button.Props{Variant: button.VariantOutline, Href: "/auth/logout", Size: button.SizeSm}) {
+									Sign out
+								}
+							</div>
+						</div>
+					</header>
+				}
+
+				<main class="mx-auto max-w-6xl px-4 py-10">
+					if !props.HideHeader && props.Title != "" {
+						<div class="mb-8">
+							<h1 class="text-3xl font-semibold tracking-tight">{ props.Title }</h1>
+							if props.Subtitle != "" {
+								<p class="mt-2 text-muted-foreground">{ props.Subtitle }</p>
+							}
+						</div>
+					}
+					{ children... }
+				</main>
+		</div>
+		<div id="toast-root"></div>
+
+		<script defer nonce={ templ.GetNonce(ctx) } src="https://unpkg.com/htmx.org@1.9.12"></script>
+		@input.Script()
+		@popover.Script()
+		@selectbox.Script()
+		@dialog.Script()
+		@toast.Script()
+		<script>
+			(function () {
+				function shouldBind(form) {
+					if (form.dataset.loading === "false") return false;
+					var method = (form.getAttribute("method") || "").toUpperCase();
+					return method === "POST" || form.hasAttribute("hx-post");
+				}
+				function hasInlineErrors(form) {
+					return form.hasAttribute("data-inline-errors");
+				}
+				function errorKey(field) {
+					return field.getAttribute("name") || field.getAttribute("id") || "";
+				}
+				function clearFieldError(form, field) {
+					if (!hasInlineErrors(form)) return;
+					var key = errorKey(field);
+					if (!key) return;
+					var msg = form.querySelector('[data-error-for="' + key + '"]');
+					if (msg) {
+						msg.textContent = "";
+						msg.classList.add("hidden");
+					}
+					field.removeAttribute("aria-invalid");
+				}
+				function clearInlineErrors(form) {
+					if (!hasInlineErrors(form)) return;
+					form.querySelectorAll('[data-error-for]').forEach(function (msg) {
+						msg.textContent = "";
+						msg.classList.add("hidden");
+					});
+					form.querySelectorAll('[aria-invalid="true"]').forEach(function (field) {
+						field.removeAttribute("aria-invalid");
+					});
+				}
+				function validationMessage(field) {
+					if (field.validity && field.validity.valueMissing) {
+						return "This field is required.";
+					}
+					if (field.validity && field.validity.typeMismatch) {
+						if (field.type === "email") return "Please enter a valid email address.";
+						return "Please enter a valid value.";
+					}
+					return field.validationMessage || "This field is invalid.";
+				}
+				function showInlineErrors(form) {
+					if (!hasInlineErrors(form)) return false;
+					var firstInvalid = null;
+					Array.prototype.forEach.call(form.elements, function (field) {
+						if (!field || !field.willValidate || field.disabled) return;
+						if (field.checkValidity()) return;
+						if (!firstInvalid) firstInvalid = field;
+						field.setAttribute("aria-invalid", "true");
+						var key = errorKey(field);
+						if (!key) return;
+						var msg = form.querySelector('[data-error-for="' + key + '"]');
+						if (msg) {
+							msg.textContent = validationMessage(field);
+							msg.classList.remove("hidden");
+						}
+					});
+					if (firstInvalid && typeof firstInvalid.focus === "function") {
+						firstInvalid.focus();
+					}
+					return true;
+				}
+				function setButtonsLoading(form) {
+					var buttons = form.querySelectorAll('button[type="submit"]');
+					if (buttons.length === 0) {
+						buttons = form.querySelectorAll("button");
+					}
+					buttons.forEach(function (button) {
+						button.disabled = true;
+						button.setAttribute("aria-busy", "true");
+						var original = button.textContent;
+						button.setAttribute("data-original", original || "");
+						button.textContent = button.getAttribute("data-loading-text") || "Working...";
+					});
+					form.dataset.loadingActive = "true";
+				}
+				function resetButtons(form) {
+					if (form.dataset.loadingActive !== "true") return;
+					var buttons = form.querySelectorAll("button");
+					buttons.forEach(function (button) {
+						button.disabled = false;
+						button.removeAttribute("aria-busy");
+						if (button.hasAttribute("data-original")) {
+							button.textContent = button.getAttribute("data-original");
+							button.removeAttribute("data-original");
+						}
+					});
+					form.dataset.loadingActive = "false";
+				}
+				function bindLoadingForms() {
+					document.querySelectorAll("form").forEach(function (form) {
+						if (!shouldBind(form)) return;
+						if (form.dataset.loadingBound === "true") return;
+						form.dataset.loadingBound = "true";
+						form.addEventListener("submit", function (event) {
+							clearInlineErrors(form);
+							if (typeof form.checkValidity === "function" && !form.checkValidity()) {
+								if (!form.hasAttribute("novalidate")) {
+									if (typeof form.reportValidity === "function") {
+										form.reportValidity();
+									}
+								} else {
+									showInlineErrors(form);
+								}
+								event.preventDefault();
+								return;
+							}
+							setButtonsLoading(form);
+						});
+						if (hasInlineErrors(form)) {
+							form.addEventListener("input", function (event) {
+								if (!event.target) return;
+								clearFieldError(form, event.target);
+							});
+							form.addEventListener("change", function (event) {
+								if (!event.target) return;
+								clearFieldError(form, event.target);
+							});
+						}
+					});
+				}
+				if (document.readyState === "loading") {
+					document.addEventListener("DOMContentLoaded", bindLoadingForms);
+				} else {
+					bindLoadingForms();
+				}
+				document.addEventListener("htmx:afterSwap", bindLoadingForms);
+				document.addEventListener("htmx:afterRequest", function (event) {
+					var target = event.target;
+					if (!target) return;
+					var form = target.tagName === "FORM" ? target : target.closest("form");
+					if (!form) return;
+					resetButtons(form);
+				});
+			})();
+		</script>
+		</body>
+	</html>
+}
+
+templ NotFoundPage() {
+	@Layout(LayoutProps{Title: "Page Not Found", ShowNav: false}) {
+		<div class="mx-auto max-w-lg rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm">
+			<h1 class="text-4xl font-semibold">404</h1>
+			<p class="mt-2 text-muted-foreground">We could not find that page.</p>
+			<div class="mt-6 flex justify-center">
+				@button.Button(button.Props{Variant: button.VariantDefault, Href: "/"}) {
+					Go Home
+				}
+			</div>
+		</div>
+	}
+}

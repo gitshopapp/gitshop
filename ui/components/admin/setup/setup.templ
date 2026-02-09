@@ -1,0 +1,308 @@
+package setup
+
+import (
+	"strings"
+
+	"github.com/gitshopapp/gitshop/internal/db"
+	"github.com/gitshopapp/gitshop/ui/components/admin/emailconfig"
+	"github.com/gitshopapp/gitshop/ui/components/badge"
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/card"
+)
+
+type GitShopYAMLStatus struct {
+	Exists           bool
+	Valid            bool
+	Method           string
+	URL              string
+	ErrorMessage     string
+	LastUpdatedLabel string
+}
+
+type RepoLabelsStatus struct {
+	Ready        bool
+	Missing      []string
+	ErrorMessage string
+}
+
+type OrderTemplateStatus struct {
+	Exists            bool
+	Valid             bool
+	Method            string
+	URL               string
+	ErrorMessage      string
+	UnknownSKUs       []string
+	PriceMismatches   []string
+	OptionMismatches  []string
+	SyncAvailable     bool
+	SyncMessage       string
+	LastUpdatedLabel  string
+	Count             int
+	DebugFilesChecked []string
+}
+
+templ WelcomeCard(repoFullName, ownerName string, repoCount int) {
+	<div class="mb-8 rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
+		<p class="text-sm text-muted-foreground">Welcome to GitShop</p>
+		<h1 class="mt-2 text-2xl font-semibold">Your storefront is almost ready.</h1>
+		<div class="mt-3 rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
+			<p class="font-medium">Setting up</p>
+			<p class="text-muted-foreground">{ repoFullName }</p>
+		</div>
+		<p class="mt-3 text-muted-foreground">
+			if ownerName != "" && repoCount > 0 {
+				GitShop is installed for { repoCount } repos under { ownerName }.
+			} else if ownerName != "" {
+				You're setting up GitShop for { ownerName }.
+			} else {
+				You're setting up GitShop for your repositories.
+			}
+		</p>
+	</div>
+}
+
+templ ChecklistCard(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus, yamlStatus *GitShopYAMLStatus, templateStatus *OrderTemplateStatus) {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Setup Checklist }
+			@card.Description() { Finish these steps before you go live. }
+		}
+		@card.Content() {
+			<div class="space-y-4">
+				@checklistItem("1", "Connect Stripe", "Accept payments and receive payouts.", !needsStripe, "Connected", false) {
+					<form method="POST" action="/admin/stripe/onboard" data-loading="true">
+						@button.Button(button.Props{Variant: button.VariantDefault, Type: button.TypeSubmit}) {
+							Connect
+						}
+					</form>
+				}
+
+				@checklistItem("2", "Configure Email", "Send confirmations and shipping updates.", !needsEmail, "Connected", false) {
+					@button.Button(button.Props{Variant: button.VariantOutline, Href: "#email-config"}) {
+						Configure
+					}
+				}
+
+				@checklistItem("3", "Create GitHub Labels", "Enable status labels on orders.", labelsStatus != nil && labelsStatus.Ready, "Ready", false) {
+					<form method="POST" action="/admin/setup/labels" data-loading="true">
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							Create Labels
+						}
+					</form>
+				}
+
+				@checklistItem("4", "Create gitshop.yaml", "Define products and shipping.", yamlStatus != nil && yamlStatus.Valid, "Ready", true) {
+					if yamlStatus != nil && yamlStatus.Valid {
+						if yamlStatus.URL != "" {
+							@button.Button(button.Props{Variant: button.VariantOutline, Href: yamlStatus.URL, Size: button.SizeSm, Target: "_blank", Attributes: templ.Attributes{"rel": "noopener"}}) {
+								View File
+							}
+						}
+					} else if yamlStatus != nil && yamlStatus.Exists {
+						@badge.Badge(badge.Props{Variant: badge.VariantDestructive}) { Needs Update }
+						if yamlStatus.URL != "" {
+							@button.Button(button.Props{Variant: button.VariantOutline, Href: yamlStatus.URL, Size: button.SizeSm, Target: "_blank", Attributes: templ.Attributes{"rel": "noopener"}}) {
+								View File
+							}
+						}
+					} else {
+						<form method="POST" action="/admin/setup/yaml" data-loading="true">
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+								Create File
+							}
+						</form>
+					}
+				}
+
+				@checklistItem("5", "Create Order Template", "Issue form for customers to place orders.", templateStatus != nil && templateStatus.Valid, "Ready", true) {
+					if templateStatus != nil && templateStatus.Valid {
+						if templateStatus.URL != "" {
+							@button.Button(button.Props{Variant: button.VariantOutline, Href: templateStatus.URL, Size: button.SizeSm, Target: "_blank", Attributes: templ.Attributes{"rel": "noopener"}}) {
+								View Template
+							}
+						}
+					} else if templateStatus != nil && templateStatus.Exists {
+						@badge.Badge(badge.Props{Variant: badge.VariantDestructive}) { Needs Update }
+						if templateStatus.URL != "" {
+							@button.Button(button.Props{Variant: button.VariantOutline, Href: templateStatus.URL, Size: button.SizeSm, Target: "_blank", Attributes: templ.Attributes{"rel": "noopener"}}) {
+								View Template
+							}
+						}
+					} else {
+						<form method="POST" action="/admin/setup/template" data-loading="true">
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+								Create Template
+							}
+						</form>
+					}
+				}
+			</div>
+		}
+	}
+}
+
+templ checklistItem(step, title, description string, ready bool, readyLabel string, showReadyChildren bool) {
+	<div class="flex items-center gap-4 rounded-xl border border-border/60 bg-card p-4">
+		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold">{ step }</div>
+		<div class="flex-1">
+			<p class="font-medium">{ title }</p>
+			<p class="text-sm text-muted-foreground">{ description }</p>
+		</div>
+		if ready {
+			@badge.Badge(badge.Props{Variant: badge.VariantDefault}) {
+				{ readyLabel }
+			}
+			if showReadyChildren {
+				{ children... }
+			}
+		} else {
+			{ children... }
+		}
+	</div>
+}
+
+templ EmailConfigurationCard(shop *db.Shop) {
+	{{ providerValue := emailconfig.NormalizeProvider(shop.EmailProvider) }}
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Email Configuration }
+			@card.Description() { Choose a provider and add credentials. }
+		}
+		@card.Content() {
+			@emailconfig.Form(emailconfig.FormProps{
+				FormID:              "setup-email-config",
+				ProviderSelectID:    "setup-provider",
+				ProviderTriggerID:   "setup-provider-trigger",
+				APIKeyID:            "api_key",
+				FromEmailID:         "from_email",
+				DomainID:            "domain",
+				ResultID:            "email-result",
+				ProviderValue:       providerValue,
+				SubmitLabel:         "Save Email Settings",
+				IncludeDialogFooter: false,
+				ReloadOnSuccess:     true,
+			})
+		}
+	}
+}
+
+templ YAMLStatusCard(yamlStatus *GitShopYAMLStatus) {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { gitshop.yaml Status }
+			@card.Description() { Product catalog and pricing live in `gitshop.yaml`. }
+		}
+		@card.Content() {
+			if yamlStatus == nil {
+				<p class="text-sm text-muted-foreground">Create the configuration file to define products and shipping.</p>
+			} else if yamlStatus.ErrorMessage != "" {
+				<p class="text-sm text-muted-foreground">We could not verify the file yet.</p>
+				<p class="mt-2 text-sm text-destructive">{ yamlStatus.ErrorMessage }</p>
+			} else if yamlStatus.Exists {
+				if yamlStatus.Valid {
+					<p class="text-sm text-muted-foreground">Your configuration file is valid.</p>
+				} else {
+					<p class="text-sm text-destructive">Your configuration file needs updates.</p>
+				}
+				if yamlStatus.LastUpdatedLabel != "" {
+					<p class="mt-2 text-xs text-muted-foreground">Last updated { yamlStatus.LastUpdatedLabel }.</p>
+				}
+				if yamlStatus.URL != "" {
+					<div class="mt-3">
+						@button.Button(button.Props{Variant: button.VariantOutline, Href: yamlStatus.URL, Target: "_blank", Attributes: templ.Attributes{"rel": "noopener"}}) {
+							View gitshop.yaml
+						}
+					</div>
+				}
+			} else if yamlStatus.Method == "pr" {
+				<p class="text-sm text-muted-foreground">Your default branch is protected, so we opened a PR.</p>
+				if yamlStatus.URL != "" {
+					<div class="mt-3">
+						@button.Button(button.Props{Variant: button.VariantOutline, Href: yamlStatus.URL}) {
+							View Pull Request
+						}
+					</div>
+				}
+			} else {
+				<p class="text-sm text-muted-foreground">No configuration file found yet.</p>
+			}
+		}
+	}
+}
+
+templ TemplateStatusCard(templateStatus *OrderTemplateStatus) {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Order Template Status }
+			@card.Description() { GitHub issue form for customers to place orders. }
+		}
+		@card.Content() {
+			if templateStatus == nil {
+				<p class="text-sm text-muted-foreground">Create a GitShop order template to accept orders.</p>
+			} else if templateStatus.ErrorMessage != "" {
+				<p class="text-sm text-muted-foreground">We could not verify the template yet.</p>
+				<p class="mt-2 text-sm text-destructive">{ templateStatus.ErrorMessage }</p>
+			} else if templateStatus.Exists {
+				if templateStatus.Valid {
+					<p class="text-sm text-muted-foreground">Your order template is valid.</p>
+				} else {
+					<p class="text-sm text-destructive">Your order template needs updates.</p>
+				}
+				if templateStatus.LastUpdatedLabel != "" {
+					<p class="mt-2 text-xs text-muted-foreground">Last updated { templateStatus.LastUpdatedLabel }.</p>
+				}
+				if len(templateStatus.UnknownSKUs) > 0 {
+					<p class="mt-2 text-sm text-destructive">Unknown SKUs: { strings.Join(templateStatus.UnknownSKUs, ", ") }</p>
+				}
+				if len(templateStatus.PriceMismatches) > 0 {
+					<p class="mt-2 text-sm text-destructive">Price mismatches: { strings.Join(templateStatus.PriceMismatches, ", ") }</p>
+				}
+				if len(templateStatus.OptionMismatches) > 0 {
+					<p class="mt-2 text-sm text-destructive">Option mismatches: { strings.Join(templateStatus.OptionMismatches, ", ") }</p>
+				}
+				{{ needsTemplateSync := len(templateStatus.PriceMismatches) > 0 || len(templateStatus.UnknownSKUs) > 0 || len(templateStatus.OptionMismatches) > 0 || !templateStatus.Valid }}
+				if needsTemplateSync {
+					if templateStatus.SyncAvailable {
+						<form method="POST" action="/admin/template/sync" data-loading="true" class="mt-3">
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+								Sync Template
+							}
+						</form>
+					} else if templateStatus.SyncMessage != "" {
+						<p class="mt-3 text-sm text-muted-foreground">{ templateStatus.SyncMessage }</p>
+					}
+				}
+				if templateStatus.URL != "" {
+					<div class="mt-3">
+						@button.Button(button.Props{Variant: button.VariantOutline, Href: templateStatus.URL, Target: "_blank", Attributes: templ.Attributes{"rel": "noopener"}}) {
+							View Order Template
+						}
+					</div>
+				}
+			} else if templateStatus.Method == "pr" {
+				<p class="text-sm text-muted-foreground">Your default branch is protected, so we opened a PR.</p>
+				if templateStatus.URL != "" {
+					<div class="mt-3">
+						@button.Button(button.Props{Variant: button.VariantOutline, Href: templateStatus.URL}) {
+							View Pull Request
+						}
+					</div>
+				}
+			} else {
+				<p class="text-sm text-muted-foreground">No order template found yet.</p>
+			}
+		}
+	}
+}
+
+templ ReadyBanner() {
+	<div class="mt-6 rounded-xl border border-border/60 bg-muted/30 p-4">
+		<p class="font-medium">You are ready to sell.</p>
+		<p class="text-sm text-muted-foreground">Head to the dashboard to monitor orders.</p>
+		<div class="mt-4">
+			@button.Button(button.Props{Variant: button.VariantDefault, Href: "/admin/dashboard"}) {
+				Go to Dashboard
+			}
+		</div>
+	</div>
+}

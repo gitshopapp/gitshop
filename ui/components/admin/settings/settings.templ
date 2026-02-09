@@ -1,0 +1,107 @@
+package settings
+
+import (
+	"github.com/gitshopapp/gitshop/internal/db"
+	"github.com/gitshopapp/gitshop/ui/components/admin/emailconfig"
+	"github.com/gitshopapp/gitshop/ui/components/badge"
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/card"
+	"github.com/gitshopapp/gitshop/ui/components/dialog"
+)
+
+templ StripeCard(stripeConnected bool) {
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Stripe }
+			@card.Description() { Payment configuration }
+		}
+		@card.Content() {
+			if !stripeConnected {
+				<form method="POST" action="/admin/stripe/onboard" data-loading="true">
+					@button.Button(button.Props{Variant: button.VariantDefault, Type: button.TypeSubmit}) {
+						Connect Stripe
+					}
+				</form>
+			} else {
+				<div class="flex items-center gap-3">
+					@badge.Badge(badge.Props{
+						Variant: badge.VariantSecondary,
+						Class:   "bg-emerald-100 text-emerald-700",
+					}) { Connected }
+					<form method="POST" action="/admin/stripe/onboard" data-loading="true">
+						@button.Button(button.Props{Variant: button.VariantOutline, Size: button.SizeSm, Type: button.TypeSubmit}) {
+							Connect Again
+						}
+					</form>
+					<form method="POST" action="/admin/stripe/disconnect" data-loading="true">
+						@button.Button(button.Props{Variant: button.VariantGhost, Size: button.SizeSm, Type: button.TypeSubmit}) {
+							Disconnect
+						}
+					</form>
+				</div>
+			}
+		}
+	}
+}
+
+templ EmailCard(shop *db.Shop) {
+	{{
+		emailCfg := decodeShopEmailConfig(shop.EmailConfig)
+		providerValue := emailconfig.NormalizeProvider(shop.EmailProvider)
+	}}
+	@card.Card() {
+		@card.Header() {
+			@card.Title() { Email }
+			@card.Description() { Notification settings }
+		}
+		@card.Content() {
+			<div class="space-y-2 text-sm text-muted-foreground">
+				<p>
+					Provider:
+					if shop.EmailProvider != "" {
+						{ shop.EmailProvider }
+					} else {
+						Not configured
+					}
+				</p>
+				if shop.EmailFrom != "" {
+					<p>From: { shop.EmailFrom }</p>
+				}
+				if emailCfg.Domain != "" {
+					<p>Domain: { emailCfg.Domain }</p>
+				}
+				if emailCfg.APIKey != "" {
+					<p>API key: { maskAPIKey(emailCfg.APIKey) }</p>
+				}
+			</div>
+			<div class="mt-4">
+				@dialog.Dialog(dialog.Props{ID: "email-update"}) {
+					@dialog.Trigger() {
+						@button.Button(button.Props{Variant: button.VariantSecondary}) {
+							Update Email
+						}
+					}
+					@dialog.Content() {
+						@dialog.Header() {
+							@dialog.Title() { Update Email Settings }
+							@dialog.Description() { Refresh credentials or change providers. }
+						}
+						@emailconfig.Form(emailconfig.FormProps{
+							FormID:              "email-config",
+							ProviderSelectID:    "settings-provider",
+							ProviderTriggerID:   "settings-provider-trigger",
+							APIKeyID:            "settings_api_key",
+							FromEmailID:         "settings_from_email",
+							DomainID:            "settings_domain",
+							ResultID:            "email-result",
+							ProviderValue:       providerValue,
+							SubmitLabel:         "Save Email Settings",
+							IncludeDialogFooter: true,
+							ReloadOnSuccess:     false,
+						})
+					}
+				}
+			</div>
+		}
+	}
+}

@@ -1,0 +1,75 @@
+package views
+
+import (
+	"github.com/gitshopapp/gitshop/internal/db"
+	setupcmp "github.com/gitshopapp/gitshop/ui/components/admin/setup"
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/card"
+)
+
+type GitShopYAMLStatus = setupcmp.GitShopYAMLStatus
+
+type RepoLabelsStatus = setupcmp.RepoLabelsStatus
+
+type OrderTemplateStatus = setupcmp.OrderTemplateStatus
+
+templ SetupPage(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus, yamlStatus *GitShopYAMLStatus, templateStatus *OrderTemplateStatus, shop *db.Shop, ownerName string, repoCount int, setupComplete bool) {
+	@Layout(LayoutProps{
+		Title:      "Set Up Your Storefront",
+		Subtitle:   "Complete setup so customers can place orders.",
+		ShowNav:    false,
+		HideHeader: true,
+	}) {
+		@setupcmp.WelcomeCard(shop.GitHubRepoFullName, ownerName, repoCount)
+
+		<div class="space-y-6">
+			@setupcmp.ChecklistCard(needsStripe, needsEmail, labelsStatus, yamlStatus, templateStatus)
+
+			if needsEmail {
+				<div id="email-config">
+					@setupcmp.EmailConfigurationCard(shop)
+				</div>
+			}
+
+			@setupcmp.YAMLStatusCard(yamlStatus)
+			@setupcmp.TemplateStatusCard(templateStatus)
+		</div>
+
+		if setupComplete {
+			@setupcmp.ReadyBanner()
+		}
+	}
+}
+
+templ SetupCompletePage(repoFullName, prURL string) {
+	@Layout(LayoutProps{
+		Title:        "Your Shop is Ready",
+		Subtitle:     "GitShop is configured and ready for orders.",
+		ActiveRoute:  "setup",
+		ShowNav:      true,
+		ShowSetupNav: false,
+	}) {
+		<div class="mx-auto max-w-lg">
+			@card.Card() {
+				@card.Content() {
+					<div class="py-6 text-center">
+						<h2 class="text-2xl font-semibold">You are live</h2>
+						<p class="mt-2 text-muted-foreground">Customers can now place orders using GitHub issues.</p>
+						if prURL != "" {
+							<div class="mt-6">
+								@button.Button(button.Props{Variant: button.VariantOutline, Href: prURL}) {
+									View Pull Request
+								}
+							</div>
+						}
+						<div class="mt-6">
+							@button.Button(button.Props{Variant: button.VariantDefault, Href: "https://github.com/" + repoFullName, FullWidth: true}) {
+								View Repository
+							}
+						</div>
+					</div>
+				}
+			}
+		</div>
+	}
+}

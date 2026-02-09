@@ -1,0 +1,159 @@
+package emailconfig
+
+import (
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/dialog"
+	"github.com/gitshopapp/gitshop/ui/components/input"
+	"github.com/gitshopapp/gitshop/ui/components/label"
+	"github.com/gitshopapp/gitshop/ui/components/selectbox"
+)
+
+type FormProps struct {
+	FormID              string
+	ProviderSelectID    string
+	ProviderTriggerID   string
+	APIKeyID            string
+	FromEmailID         string
+	DomainID            string
+	ResultID            string
+	ProviderValue       string
+	SubmitLabel         string
+	IncludeDialogFooter bool
+	ReloadOnSuccess     bool
+}
+
+templ Form(props FormProps) {
+	<form
+		id={ props.FormID }
+		hx-post="/admin/settings/email"
+		hx-target={ "#" + props.ResultID }
+		hx-swap="innerHTML"
+		class="space-y-6"
+		data-inline-errors="true"
+		data-email-config-form
+		if props.ReloadOnSuccess {
+			data-email-reload-on-success="true"
+		}
+		novalidate
+	>
+		@providerSection(props.ProviderSelectID, props.ProviderTriggerID, props.ProviderValue)
+		<p class="mt-2 text-xs text-destructive hidden" data-error-for="provider"></p>
+
+		@credentialsSection(props.APIKeyID, props.FromEmailID, props.DomainID)
+
+		if props.IncludeDialogFooter {
+			@dialog.Footer() {
+				@dialog.Close() {
+					@button.Button(button.Props{Variant: button.VariantGhost, Type: button.TypeButton}) {
+						Cancel
+					}
+				}
+				@button.Button(button.Props{Variant: button.VariantDefault, Type: button.TypeSubmit}) {
+					{ props.SubmitLabel }
+				}
+			}
+		} else {
+			@button.Button(button.Props{Variant: button.VariantDefault, Type: button.TypeSubmit}) {
+				{ props.SubmitLabel }
+			}
+		}
+	</form>
+	<div id={ props.ResultID } class="mt-4"></div>
+	@formScript()
+}
+
+templ providerSection(selectID, triggerID, providerValue string) {
+	<div class="rounded-xl border border-border/60 bg-muted/20 p-4">
+		<p class="text-sm font-medium">Provider</p>
+		<div class="mt-3">
+			@label.Label(label.Props{For: triggerID}) { Email Provider }
+			@selectbox.SelectBox(selectbox.Props{ID: selectID}) {
+				@selectbox.Trigger(selectbox.TriggerProps{
+					ID:   triggerID,
+					Name: "provider",
+					Attributes: templ.Attributes{
+						"data-email-provider-input": "true",
+					},
+				}) {
+					@selectbox.Value(selectbox.ValueProps{Placeholder: "Select provider"})
+				}
+				@selectbox.Content(selectbox.ContentProps{NoSearch: true}) {
+					@selectbox.Item(selectbox.ItemProps{Value: "postmark", Selected: providerValue == "postmark"}) { Postmark }
+					@selectbox.Item(selectbox.ItemProps{Value: "mailgun", Selected: providerValue == "mailgun"}) { Mailgun }
+					@selectbox.Item(selectbox.ItemProps{Value: "resend", Selected: providerValue == "resend"}) { Resend }
+				}
+			}
+		</div>
+	</div>
+}
+
+templ credentialsSection(apiKeyID, fromEmailID, domainID string) {
+	<div class="grid gap-4 rounded-xl border border-border/60 bg-card p-4">
+		<p class="text-sm font-medium">Credentials</p>
+		<div class="grid gap-4">
+			<div>
+				@label.Label(label.Props{For: apiKeyID}) { API Key }
+				@input.Input(input.Props{ID: apiKeyID, Name: "api_key", Type: input.TypePassword, Placeholder: "Your provider API key", Attributes: templ.Attributes{"required": "true"}})
+				<p class="mt-1 text-xs text-destructive hidden" data-error-for="api_key"></p>
+			</div>
+			<div>
+				@label.Label(label.Props{For: fromEmailID}) { From Email }
+				@input.Input(input.Props{ID: fromEmailID, Name: "from_email", Type: input.TypeEmail, Placeholder: "orders@yourstore.com", Attributes: templ.Attributes{"required": "true"}})
+				<p class="mt-1 text-xs text-destructive hidden" data-error-for="from_email"></p>
+			</div>
+			<div data-mailgun-domain-field>
+				@label.Label(label.Props{For: domainID}) { Domain (Mailgun only) }
+				@input.Input(input.Props{ID: domainID, Name: "domain", Placeholder: "mg.yourstore.com"})
+			</div>
+		</div>
+	</div>
+}
+
+templ formScript() {
+	<script>
+		(function () {
+			function syncEmailConfigForm(form) {
+				if (!form) return;
+				var domainField = form.querySelector("[data-mailgun-domain-field]");
+				var providerInput = form.querySelector("[data-email-provider-input]");
+				if (!domainField || !providerInput) return;
+
+				var isMailgun = (providerInput.value || "").toLowerCase() === "mailgun";
+				domainField.classList.toggle("hidden", !isMailgun);
+			}
+
+			function syncAll(root) {
+				if (!root || typeof root.querySelectorAll !== "function") return;
+				root.querySelectorAll("[data-email-config-form]").forEach(function (form) {
+					syncEmailConfigForm(form);
+				});
+			}
+
+			if (!window.__gitshopEmailConfigBound) {
+				window.__gitshopEmailConfigBound = true;
+				document.addEventListener("change", function (event) {
+					var target = event.target;
+					if (!target || !target.matches("[data-email-provider-input]")) return;
+					var form = target.closest("[data-email-config-form]");
+					syncEmailConfigForm(form);
+				});
+				document.addEventListener("htmx:afterSwap", function (event) {
+					syncAll(event && event.target ? event.target : document);
+				});
+				document.body.addEventListener("email-settings-updated", function () {
+					if (document.querySelector("[data-email-config-form][data-email-reload-on-success=\"true\"]")) {
+						window.location.reload();
+					}
+				});
+			}
+
+			if (document.readyState === "loading") {
+				document.addEventListener("DOMContentLoaded", function () {
+					syncAll(document);
+				});
+			} else {
+				syncAll(document);
+			}
+		})();
+	</script>
+}

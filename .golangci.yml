@@ -1,0 +1,97 @@
+version: "2"
+
+run:
+  timeout: 10m
+  tests: true
+  issues-exit-code: 1
+
+output:
+  formats:
+    text:
+      path: stdout
+      colors: true
+
+linters:
+  default: none
+  enable:
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - errcheck
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - noctx
+    - predeclared
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    gosec:
+      config:
+        global:
+          audit: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    misspell:
+      locale: US
+    staticcheck:
+      checks:
+        - all
+        - -SA1019
+        - -ST1000
+        - -ST1003
+        - -ST1020
+        - -ST1022
+    revive:
+      enable-all-rules: false
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: var-naming
+          disabled: true
+
+  exclusions:
+    generated: strict
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - misspell
+          - unparam
+      - path: vendor/
+        linters:
+          - gosec
+          - misspell
+          - unparam
+      - path: internal/db/queries/
+        linters:
+          - unparam
+          - unused
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/gitshopapp/gitshop
+  exclusions:
+    generated: strict
+    paths:
+      - vendor/
