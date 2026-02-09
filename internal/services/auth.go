@@ -95,11 +95,21 @@ func NewAuthService(cfg *config.Config, shopStore *db.ShopStore, logger *slog.Lo
 			ClientSecret: cfg.GitHubClientSecret,
 			Endpoint:     github.Endpoint,
 			Scopes:       []string{"read:user", "user:email"},
+			RedirectURL:  gitHubOAuthRedirectURL(cfg.BaseURL),
 		},
 		gitHubAppID: gitHubAppID,
 		httpClient:  &http.Client{Timeout: 10 * time.Second},
 		logger:      logger,
 	}, nil
+}
+
+func gitHubOAuthRedirectURL(baseURL string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return ""
+	}
+
+	return strings.TrimRight(baseURL, "/") + "/auth/github/callback"
 }
 
 func (s *AuthService) StartGitHubLogin() (StartGitHubLoginResult, error) {

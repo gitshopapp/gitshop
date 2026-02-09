@@ -12,6 +12,7 @@ import (
 
 	"github.com/gitshopapp/gitshop/internal/config"
 	"github.com/gitshopapp/gitshop/internal/handlers"
+	uiassets "github.com/gitshopapp/gitshop/ui/assets"
 	"github.com/gitshopapp/gitshop/ui/views"
 )
 
@@ -96,7 +97,7 @@ func (s *Server) buildRouter() *mux.Router {
 	})
 
 	// Static assets - must be before admin router
-	r.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir("./ui/assets/")))).Name("assets")
+	r.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.FS(uiassets.FS)))).Name("assets")
 
 	r.HandleFunc("/auth/github/login", h.GitHubLogin).Methods("GET").Name("auth.github.login")
 	r.HandleFunc("/auth/github/callback", h.GitHubCallback).Methods("GET").Name("auth.github.callback")

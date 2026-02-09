@@ -81,12 +81,17 @@ func (h *Handlers) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	stateCookie, err := r.Cookie("oauth_state")
 	if err != nil {
-		logger.Warn("oauth state cookie not found; restarting oauth flow", "error", err, "installation_id", installationIDFromQuery)
-		if installationIDFromQuery > 0 {
+		state := strings.TrimSpace(r.URL.Query().Get("state"))
+		code := strings.TrimSpace(r.URL.Query().Get("code"))
+
+		if installationIDFromQuery > 0 && state == "" && code == "" {
+			logger.Info("oauth callback from installation flow; restarting oauth", "installation_id", installationIDFromQuery)
 			http.Redirect(w, r, fmt.Sprintf("/auth/github/login?installation_id=%d", installationIDFromQuery), http.StatusSeeOther)
 			return
 		}
-		http.Redirect(w, r, "/auth/github/login", http.StatusSeeOther)
+
+		logger.Warn("oauth state cookie not found; returning to login", "error", err, "installation_id", installationIDFromQuery)
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 		return
 	}
 

@@ -1,6 +1,12 @@
 package handlers
 
-import "testing"
+import (
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
 
 func TestParseInstallationID(t *testing.T) {
 	t.Parallel()
@@ -37,5 +43,47 @@ func TestParseInstallationID(t *testing.T) {
 				t.Fatalf("unexpected installation id: got=%d want=%d", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestGitHubCallback_MissingStateCookie_InstallationStartRedirectsToLoginFlow(t *testing.T) {
+	t.Parallel()
+
+	h := &Handlers{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/callback?installation_id=12345", nil)
+	rec := httptest.NewRecorder()
+
+	h.GitHubCallback(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/auth/github/login?installation_id=12345" {
+		t.Fatalf("unexpected redirect location: got=%q", location)
+	}
+}
+
+func TestGitHubCallback_MissingStateCookie_WithOAuthPayloadRedirectsToAdminLogin(t *testing.T) {
+	t.Parallel()
+
+	h := &Handlers{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/callback?installation_id=12345&code=test-code&state=test-state", nil)
+	rec := httptest.NewRecorder()
+
+	h.GitHubCallback(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/admin/login" {
+		t.Fatalf("unexpected redirect location: got=%q", location)
 	}
 }

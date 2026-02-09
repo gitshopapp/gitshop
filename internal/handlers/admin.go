@@ -66,7 +66,8 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 	if sess.ShopID == uuid.Nil {
 		shops, err := h.adminService.GetInstallationShops(ctx, sess.InstallationID)
 		if err != nil {
-			http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+			h.loggerFromContext(ctx).Error("failed to load installation shops for setup", "error", err, "installation_id", sess.InstallationID)
+			http.Error(w, "Failed to load shops", http.StatusInternalServerError)
 			return
 		}
 		switch len(shops) {
@@ -87,30 +88,37 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shop, err := h.adminService.GetShopForInstallation(ctx, sess.InstallationID, sess.ShopID)
-	if err == nil {
-		stripeReady := h.adminService.IsStripeReady(ctx, shop)
-		needsStripe := !stripeReady
-		needsEmail := !services.IsEmailConfigured(shop)
-
-		ownerName := ""
-		if parts := strings.Split(shop.GitHubRepoFullName, "/"); len(parts) > 0 {
-			ownerName = parts[0]
+	if err != nil {
+		h.loggerFromContext(ctx).Warn("active shop is no longer available for installation", "error", err, "shop_id", sess.ShopID, "installation_id", sess.InstallationID)
+		sess.ShopID = uuid.Nil
+		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
+			h.loggerFromContext(ctx).Error("failed to clear unavailable shop from session", "error", updateErr, "installation_id", sess.InstallationID)
+			http.Error(w, "Failed to load shop", http.StatusInternalServerError)
+			return
 		}
-
-		repoCount := 1
-		if shops, err := h.adminService.GetInstallationShops(ctx, sess.InstallationID); err == nil && len(shops) > 0 {
-			repoCount = len(shops)
-		}
-
-		labelsStatus, yamlStatus, templateStatus, setupComplete := h.buildSetupStatus(ctx, shop, r.URL.Query(), stripeReady)
-
-		if err := views.SetupPage(needsStripe, needsEmail, labelsStatus, yamlStatus, templateStatus, shop, ownerName, repoCount, setupComplete).Render(ctx, w); err != nil {
-			h.loggerFromContext(ctx).Error("failed to render setup page", "error", err)
-		}
+		http.Redirect(w, r, "/admin/shops", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+	stripeReady := h.adminService.IsStripeReady(ctx, shop)
+	needsStripe := !stripeReady
+	needsEmail := !services.IsEmailConfigured(shop)
+
+	ownerName := ""
+	if parts := strings.Split(shop.GitHubRepoFullName, "/"); len(parts) > 0 {
+		ownerName = parts[0]
+	}
+
+	repoCount := 1
+	if shops, err := h.adminService.GetInstallationShops(ctx, sess.InstallationID); err == nil && len(shops) > 0 {
+		repoCount = len(shops)
+	}
+
+	labelsStatus, yamlStatus, templateStatus, setupComplete := h.buildSetupStatus(ctx, shop, r.URL.Query(), stripeReady)
+
+	if err := views.SetupPage(needsStripe, needsEmail, labelsStatus, yamlStatus, templateStatus, shop, ownerName, repoCount, setupComplete).Render(ctx, w); err != nil {
+		h.loggerFromContext(ctx).Error("failed to render setup page", "error", err)
+	}
 }
 
 func isEmailConfigured(shop *db.Shop) bool {

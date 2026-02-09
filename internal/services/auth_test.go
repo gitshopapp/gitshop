@@ -66,3 +66,40 @@ func TestPickAuthorizedInstallationID_FallsBackToFirstAllowed(t *testing.T) {
 		t.Fatalf("unexpected installation id: got=%d want=%d", got, 10)
 	}
 }
+
+func TestGitHubOAuthRedirectURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{
+			name:    "empty",
+			baseURL: "",
+			want:    "",
+		},
+		{
+			name:    "without trailing slash",
+			baseURL: "https://gitshop.example",
+			want:    "https://gitshop.example/auth/github/callback",
+		},
+		{
+			name:    "with trailing slash",
+			baseURL: "https://gitshop.example/",
+			want:    "https://gitshop.example/auth/github/callback",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := gitHubOAuthRedirectURL(tc.baseURL)
+			if got != tc.want {
+				t.Fatalf("unexpected redirect url: got=%q want=%q", got, tc.want)
+			}
+		})
+	}
+}
