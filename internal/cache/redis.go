@@ -27,7 +27,7 @@ func NewRedisProvider(connectionString string) (*RedisProvider, error) {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		_ = client.Close()
+		_ = client.Close() //nolint
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
