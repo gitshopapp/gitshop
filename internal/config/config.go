@@ -25,11 +25,9 @@ type Config struct {
 	StripeConnectClientID string `env:"STRIPE_CONNECT_CLIENT_ID"`
 	BaseURL               string `env:"BASE_URL" validate:"omitempty,url"`
 
-	CacheProvider        string `env:"CACHE_PROVIDER" envDefault:"memory" validate:"omitempty,oneof=memory redis"`
-	SessionStoreProvider string `env:"SESSION_STORE_PROVIDER" envDefault:"memory" validate:"omitempty,oneof=memory redis"`
-	RedisAddr            string `env:"REDIS_ADDR" envDefault:"localhost:6379" validate:"required_if=CacheProvider redis,required_if=SessionStoreProvider redis"`
-	RedisPassword        string `env:"REDIS_PASSWORD"`
-	RedisDB              int    `env:"REDIS_DB" envDefault:"0"`
+	CacheProvider         string `env:"CACHE_PROVIDER" envDefault:"memory" validate:"omitempty,oneof=memory redis"`
+	SessionStoreProvider  string `env:"SESSION_STORE_PROVIDER" envDefault:"memory" validate:"omitempty,oneof=memory redis"`
+	RedisConnectionString string `env:"REDIS_CONNECTION_STRING" envDefault:"redis://localhost:6379/0" validate:"required_if=CacheProvider redis,required_if=SessionStoreProvider redis"`
 
 	EncryptionKey string `env:"ENCRYPTION_KEY,required" validate:"required,len=32"`
 

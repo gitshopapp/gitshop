@@ -6,10 +6,8 @@ import (
 )
 
 type Config struct {
-	Provider      string
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
+	Provider              string
+	RedisConnectionString string
 }
 
 func NewStore(ctx context.Context, cfg Config) (Store, error) {
@@ -17,7 +15,7 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 	case "", "memory":
 		return NewMemoryStore(), nil
 	case "redis":
-		return NewRedisStore(ctx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+		return NewRedisStore(ctx, cfg.RedisConnectionString)
 	default:
 		return nil, fmt.Errorf("unsupported session store provider: %s", cfg.Provider)
 	}

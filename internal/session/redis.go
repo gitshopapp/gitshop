@@ -16,16 +16,17 @@ type RedisStore struct {
 	client *redis.Client
 }
 
-func NewRedisStore(ctx context.Context, addr, password string, db int) (*RedisStore, error) {
+func NewRedisStore(ctx context.Context, connectionString string) (*RedisStore, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("context is required")
 	}
 
-	client := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: password,
-		DB:       db,
-	})
+	opts, err := redis.ParseURL(connectionString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse redis connection string: %w", err)
+	}
+
+	client := redis.NewClient(opts)
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

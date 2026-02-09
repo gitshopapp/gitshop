@@ -35,7 +35,7 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgres://gitshop:gitshop@postgres:5432/gitshop?sslmode=disable
-      - REDIS_ADDR=redis:6379
+      - REDIS_CONNECTION_STRING=redis://redis:6379/0
     command: air -c .air.toml
     ports:
       - "8080:8080"

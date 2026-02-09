@@ -60,18 +60,18 @@ func TestValidateSessionStoreProvider(t *testing.T) {
 	}
 }
 
-func TestValidateRedisAddrForSessionStore(t *testing.T) {
+func TestValidateRedisConnectionStringForSessionStore(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
 	cfg.SessionStoreProvider = "redis"
-	cfg.RedisAddr = ""
+	cfg.RedisConnectionString = ""
 
 	err := cfg.validate()
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "RedisAddr") || !strings.Contains(err.Error(), "required_if") {
+	if !strings.Contains(err.Error(), "RedisConnectionString") || !strings.Contains(err.Error(), "required_if") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -144,7 +144,7 @@ func validConfig() *Config {
 		StripeWebhookSecret:    "whsec_123",
 		CacheProvider:          "memory",
 		SessionStoreProvider:   "memory",
-		RedisAddr:              "localhost:6379",
+		RedisConnectionString:  "redis://localhost:6379/0",
 		EncryptionKey:          strings.Repeat("k", 32),
 		LogFormat:              "text",
 	}

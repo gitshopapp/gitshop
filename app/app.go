@@ -57,10 +57,8 @@ func New() (*App, error) {
 	}
 
 	cacheProvider, err := cache.NewProvider(cache.Config{
-		Provider:      cfg.CacheProvider,
-		RedisAddr:     cfg.RedisAddr,
-		RedisPassword: cfg.RedisPassword,
-		RedisDB:       cfg.RedisDB,
+		Provider:              cfg.CacheProvider,
+		RedisConnectionString: cfg.RedisConnectionString,
 	})
 	if err != nil {
 		database.Close()
@@ -68,10 +66,8 @@ func New() (*App, error) {
 	}
 
 	sessionStore, err := session.NewStore(startupCtx, session.Config{
-		Provider:      cfg.SessionStoreProvider,
-		RedisAddr:     cfg.RedisAddr,
-		RedisPassword: cfg.RedisPassword,
-		RedisDB:       cfg.RedisDB,
+		Provider:              cfg.SessionStoreProvider,
+		RedisConnectionString: cfg.RedisConnectionString,
 	})
 	if err != nil {
 		closeCacheProvider(logger, cacheProvider)

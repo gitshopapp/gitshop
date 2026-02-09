@@ -301,7 +301,7 @@ DATABASE_URL=postgres://user:pass@host:5432/db
 
 # Cache
 CACHE_PROVIDER=memory|redis
-REDIS_ADDR=localhost:6379
+REDIS_CONNECTION_STRING=redis://localhost:6379/0
 
 # GitHub App
 GITHUB_APP_ID=your_app_id
