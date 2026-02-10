@@ -66,7 +66,7 @@ func (s *AdminService) GetInstallationShops(ctx context.Context, installationID 
 		return []*db.Shop{}, nil
 	}
 
-	shops, err := s.shopStore.GetShopsByInstallationID(ctx, installationID)
+	shops, err := s.shopStore.GetConnectedShopsByInstallationID(ctx, installationID)
 	if err != nil {
 		return nil, err
 	}

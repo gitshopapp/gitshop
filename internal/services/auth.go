@@ -163,7 +163,7 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 		return result, nil
 	}
 
-	shops, err := s.shopStore.GetShopsByInstallationID(ctx, installationID)
+	shops, err := s.shopStore.GetConnectedShopsByInstallationID(ctx, installationID)
 	if err != nil {
 		result.ResolutionError = fmt.Errorf("failed to get shops for installation %d: %w", installationID, err)
 		result.Shops = []*db.Shop{}

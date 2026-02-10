@@ -72,8 +72,13 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 		}
 		switch len(shops) {
 		case 0:
-			if err := views.NoShopsPage().Render(ctx, w); err != nil {
-				h.loggerFromContext(ctx).Error("failed to render no shops page", "error", err)
+			sess.InstallationID = 0
+			sess.ShopID = uuid.Nil
+			if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
+				h.loggerFromContext(ctx).Error("failed to clear stale installation from session", "error", updateErr)
+			}
+			if err := views.NoInstallationPage().Render(ctx, w); err != nil {
+				h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
 			}
 			return
 		case 1:
@@ -299,6 +304,15 @@ func (h *Handlers) adminShop(ctx context.Context, w http.ResponseWriter, r *http
 	shop, err := h.adminService.GetShopForInstallation(ctx, sess.InstallationID, sess.ShopID)
 	if err != nil {
 		http.Error(w, "Shop not found", http.StatusNotFound)
+		return nil, false
+	}
+	if !shop.IsConnected() {
+		sess.InstallationID = 0
+		sess.ShopID = uuid.Nil
+		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
+			h.loggerFromContext(ctx).Error("failed to clear disconnected shop from session", "error", updateErr)
+		}
+		h.htmxRedirect(w, r, "/admin/setup")
 		return nil, false
 	}
 
