@@ -44,7 +44,11 @@ func (s *TemplateSyncer) BuildTemplateContent(config *GitShopConfig) (string, er
 	if _, err := sharedOptionDefinitions(products); err != nil {
 		return "", err
 	}
-	return s.generateIssueTemplate(products)
+	content, err := s.generateIssueTemplate(products)
+	if err != nil {
+		return "", err
+	}
+	return withOrderTemplateMarker(content), nil
 }
 
 func (s *TemplateSyncer) SyncTemplateContent(existingTemplate string, config *GitShopConfig) (string, error) {
@@ -90,12 +94,13 @@ func (s *TemplateSyncer) SyncTemplateContent(existingTemplate string, config *Gi
 	setFieldRequired(quantityField, true)
 
 	s.syncOptionFields(bodyNode, sharedOptions)
+	ensureLiteralStyleForMultilineScalars(&doc)
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
 		return "", fmt.Errorf("failed to encode updated template: %w", err)
 	}
-	return string(out), nil
+	return withOrderTemplateMarker(string(out)), nil
 }
 
 func (s *TemplateSyncer) IsSimpleSync(existingTemplate string, config *GitShopConfig) (bool, string, error) {
@@ -161,7 +166,11 @@ func (s *TemplateSyncer) syncOptionFields(bodyNode *yaml.Node, options []normali
 	end := start
 	for end < len(bodyNode.Content) {
 		item := bodyNode.Content[end]
-		if !isManagedOptionField(item) {
+		if item == nil || item.Kind != yaml.MappingNode {
+			break
+		}
+		fieldID := getFieldID(item)
+		if _, expected := expectedOptionIDs[fieldID]; !expected {
 			break
 		}
 		end++
@@ -317,7 +326,7 @@ func (s *TemplateSyncer) generateIssueTemplate(products []ProductConfig) (string
 	if err != nil {
 		return "", fmt.Errorf("failed to encode issue template: %w", err)
 	}
-	return "# gitshop:order-template\n" + string(content), nil
+	return string(content), nil
 }
 
 func (s *TemplateSyncer) CreateDefaultGitShopYaml(ctx context.Context, installationID int64, repoFullName string) error {
@@ -565,22 +574,6 @@ func getFieldID(field *yaml.Node) string {
 	return strings.TrimSpace(idNode.Value)
 }
 
-func isManagedOptionField(field *yaml.Node) bool {
-	if field == nil || field.Kind != yaml.MappingNode {
-		return false
-	}
-	fieldID := getFieldID(field)
-	if fieldID == "" || fieldID == "product" || fieldID == "quantity" {
-		return false
-	}
-	fieldTypeNode := findMappingValue(field, "type")
-	if fieldTypeNode == nil {
-		return false
-	}
-	fieldType := strings.TrimSpace(strings.ToLower(fieldTypeNode.Value))
-	return fieldType == "dropdown" || fieldType == "text"
-}
-
 func ensureFieldByID(bodyNode *yaml.Node, id, fieldType string) *yaml.Node {
 	field := findFieldByID(bodyNode, id)
 	if field != nil {
@@ -692,5 +685,22 @@ func scalarNode(value string) *yaml.Node {
 		Kind:  yaml.ScalarNode,
 		Tag:   "!!str",
 		Value: value,
+	}
+}
+
+func withOrderTemplateMarker(content string) string {
+	trimmed := strings.TrimLeft(content, "\n")
+	return "# gitshop:order-template\n" + trimmed
+}
+
+func ensureLiteralStyleForMultilineScalars(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" && strings.Contains(node.Value, "\n") {
+		node.Style = yaml.LiteralStyle
+	}
+	for _, child := range node.Content {
+		ensureLiteralStyleForMultilineScalars(child)
 	}
 }

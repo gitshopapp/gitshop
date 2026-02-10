@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestSyncTemplateContent_RemovesStaleAndDuplicateOptions(t *testing.T) {
+func TestSyncTemplateContent_PreservesCustomFieldsAndNormalizesManagedOptions(t *testing.T) {
 	t.Parallel()
 
 	syncer := NewTemplateSyncer(nil)
@@ -106,8 +106,8 @@ body:
 	if strings.Count(synced, "id: grind") != 1 {
 		t.Fatalf("expected exactly one grind field, got %d", strings.Count(synced, "id: grind"))
 	}
-	if strings.Contains(synced, "id: size") {
-		t.Fatalf("expected stale size option to be removed")
+	if !strings.Contains(synced, "id: size") {
+		t.Fatalf("expected custom size field to remain")
 	}
 	if !strings.Contains(synced, "id: roast") {
 		t.Fatalf("expected new roast option to be added")
@@ -123,6 +123,78 @@ body:
 	}
 	if parsed.Name != "Custom Store Order" {
 		t.Fatalf("expected top-level name to remain unchanged, got %q", parsed.Name)
+	}
+}
+
+func TestSyncTemplateContent_PreservesMarkerAndMultilineMarkdownStyle(t *testing.T) {
+	t.Parallel()
+
+	syncer := NewTemplateSyncer(nil)
+	config := &GitShopConfig{
+		Products: []ProductConfig{
+			{
+				SKU:            "COFFEE_BLEND_V1",
+				Name:           "Coffee Blend V1",
+				UnitPriceCents: 1600,
+				Active:         true,
+				Options: []ProductOption{
+					{
+						Name:     "grind",
+						Label:    "Grind",
+						Type:     "dropdown",
+						Required: true,
+						Values:   []string{"Ground", "Whole Bean"},
+					},
+				},
+			},
+		},
+	}
+
+	existing := `# gitshop:order-template
+name: "Custom Store Order"
+description: Keep this description
+title: "[ORDER] "
+labels: ["gitshop:order", "gitshop:status:pending-payment"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Hello
+        This should stay multiline.
+  - type: dropdown
+    id: product
+    attributes:
+      label: Product
+      options:
+        - "Coffee Blend V1 - $16.00 (SKU:COFFEE_BLEND_V1)"
+    validations:
+      required: true
+  - type: dropdown
+    id: quantity
+    attributes:
+      label: Quantity
+      options: ["1", "2", "3", "4", "5"]
+    validations:
+      required: true
+  - type: dropdown
+    id: grind
+    attributes:
+      label: Grind
+      options: ["Ground", "Whole Bean"]
+    validations:
+      required: true
+`
+
+	synced, err := syncer.SyncTemplateContent(existing, config)
+	if err != nil {
+		t.Fatalf("SyncTemplateContent returned error: %v", err)
+	}
+
+	if !strings.HasPrefix(synced, "# gitshop:order-template\n") {
+		t.Fatalf("expected marker prefix to be preserved")
+	}
+	if !strings.Contains(synced, "value: |") {
+		t.Fatalf("expected multiline markdown value to use literal block style")
 	}
 }
 

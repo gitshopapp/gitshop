@@ -132,6 +132,66 @@ body:
 	}
 }
 
+func TestFindTemplateOptionMismatches_AllowsAdditionalTemplateFields(t *testing.T) {
+	t.Parallel()
+
+	config := &catalog.GitShopConfig{
+		Products: []catalog.ProductConfig{
+			{
+				SKU:            "COFFEE_BLEND_V1",
+				Name:           "Coffee Blend V1",
+				UnitPriceCents: 1600,
+				Active:         true,
+				Options: []catalog.ProductOption{
+					{
+						Name:     "grind",
+						Label:    "Grind",
+						Type:     "dropdown",
+						Required: true,
+						Values:   []string{"Ground", "Whole Bean"},
+					},
+				},
+			},
+		},
+	}
+
+	template := `
+body:
+  - type: dropdown
+    id: product
+    attributes:
+      options:
+        - "Coffee Blend V1 — $16.00 (SKU:COFFEE_BLEND_V1)"
+  - type: dropdown
+    id: quantity
+    attributes:
+      options:
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+  - type: dropdown
+    id: grind
+    attributes:
+      label: Grind
+      options:
+        - Ground
+        - Whole Bean
+  - type: textarea
+    id: order_notes
+    attributes:
+      label: Notes
+`
+
+	mismatches := findTemplateOptionMismatches(template, config)
+	for _, mismatch := range mismatches {
+		if strings.Contains(mismatch, "unexpected option") {
+			t.Fatalf("did not expect unexpected-option mismatch, got %v", mismatches)
+		}
+	}
+}
+
 func TestTemplateHasLabel(t *testing.T) {
 	t.Parallel()
 

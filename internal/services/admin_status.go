@@ -584,22 +584,6 @@ func findTemplateOptionMismatches(template string, config *catalog.GitShopConfig
 		}
 	}
 
-	expectedOptionIDs := map[string]struct{}{}
-	for _, option := range baseProduct.Options {
-		if option.Name == "quantity" {
-			continue
-		}
-		expectedOptionIDs[option.Name] = struct{}{}
-	}
-	for optionID := range templateOptions {
-		if optionID == "" || optionID == "product" || optionID == "quantity" {
-			continue
-		}
-		if _, ok := expectedOptionIDs[optionID]; !ok {
-			mismatches = append(mismatches, fmt.Sprintf("unexpected option: %s", optionID))
-		}
-	}
-
 	return mismatches
 }
 

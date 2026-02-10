@@ -256,7 +256,7 @@ func (h *Handlers) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminDashboardStorefront(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	shop, ok := h.adminShop(ctx, w, r, true)
+	shop, ok := h.adminShop(ctx, w, r, false)
 	if !ok {
 		return
 	}
@@ -269,7 +269,7 @@ func (h *Handlers) AdminDashboardStorefront(w http.ResponseWriter, r *http.Reque
 
 func (h *Handlers) AdminDashboardOrders(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	shop, ok := h.adminShop(ctx, w, r, true)
+	shop, ok := h.adminShop(ctx, w, r, false)
 	if !ok {
 		return
 	}
