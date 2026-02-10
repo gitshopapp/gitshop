@@ -128,6 +128,19 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/shops", http.StatusSeeOther)
 		return
 	}
+	if !shop.IsConnected() {
+		sess.InstallationID = 0
+		sess.ShopID = uuid.Nil
+		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
+			h.loggerFromContext(ctx).Error("failed to clear disconnected shop from session", "error", updateErr, "installation_id", sess.InstallationID)
+			http.Error(w, "Failed to update session", http.StatusInternalServerError)
+			return
+		}
+		if err := views.NoInstallationPage().Render(ctx, w); err != nil {
+			h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
+		}
+		return
+	}
 
 	stripeReady := h.adminService.IsStripeReady(ctx, shop)
 	needsStripe := !stripeReady
@@ -165,7 +178,7 @@ func (h *Handlers) AdminSetupComplete(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminSetupLabels(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	shop, ok := h.shopFromSession(ctx)
+	shop, ok := h.shopFromSession(ctx, r)
 	if !ok {
 		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
 		return
@@ -182,7 +195,7 @@ func (h *Handlers) AdminSetupLabels(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminSetupYAML(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	shop, ok := h.shopFromSession(ctx)
+	shop, ok := h.shopFromSession(ctx, r)
 	if !ok {
 		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
 		return
@@ -209,7 +222,7 @@ func (h *Handlers) AdminSetupYAML(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminSetupTemplate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	shop, ok := h.shopFromSession(ctx)
+	shop, ok := h.shopFromSession(ctx, r)
 	if !ok {
 		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
 		return
@@ -236,7 +249,7 @@ func (h *Handlers) AdminSetupTemplate(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminSyncTemplate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	shop, ok := h.shopFromSession(ctx)
+	shop, ok := h.shopFromSession(ctx, r)
 	if !ok {
 		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
 		return
@@ -361,7 +374,7 @@ func (h *Handlers) buildRepoStatus(ctx context.Context, shop *db.Shop) *views.Re
 	return repoStatusToView(h.adminService.BuildRepoStatus(ctx, shop))
 }
 
-func (h *Handlers) shopFromSession(ctx context.Context) (*db.Shop, bool) {
+func (h *Handlers) shopFromSession(ctx context.Context, r *http.Request) (*db.Shop, bool) {
 	sess := session.GetSessionFromContext(ctx)
 	if sess == nil || sess.ShopID == uuid.Nil {
 		return nil, false
@@ -369,6 +382,14 @@ func (h *Handlers) shopFromSession(ctx context.Context) (*db.Shop, bool) {
 
 	shop, err := h.adminService.GetShopForInstallation(ctx, sess.InstallationID, sess.ShopID)
 	if err != nil {
+		return nil, false
+	}
+	if !shop.IsConnected() {
+		sess.InstallationID = 0
+		sess.ShopID = uuid.Nil
+		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
+			h.loggerFromContext(ctx).Error("failed to clear disconnected shop from session", "error", updateErr)
+		}
 		return nil, false
 	}
 
