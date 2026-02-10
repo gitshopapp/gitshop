@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gitshopapp/gitshop/internal/db"
 	"github.com/gitshopapp/gitshop/ui/components/accordion"
 	"github.com/gitshopapp/gitshop/ui/components/badge"
@@ -246,6 +247,7 @@ templ OrdersSection(orders []*db.Order) {
 						@table.Header() {
 							@table.Row() {
 								@table.Head() { Order }
+								@table.Head() { Created }
 								@table.Head() { Product }
 								@table.Head() { Customer }
 								@table.Head() { Status }
@@ -274,6 +276,7 @@ templ orderRow(order *db.Order) {
 				#{ fmt.Sprintf("%d", order.OrderNumber) }
 			</a>
 		}
+		@table.Cell() { { orderCreatedLabel(order) } }
 		@table.Cell() { { order.SKU } }
 		@table.Cell() { { order.GitHubUsername } }
 		@table.Cell() {
@@ -430,8 +433,9 @@ templ OrdersSkeleton() {
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-10"})
 						</div>
-						<div class="grid grid-cols-7 gap-4">
+						<div class="grid grid-cols-8 gap-4">
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-12"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-16"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-20"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-20"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
@@ -439,8 +443,9 @@ templ OrdersSkeleton() {
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-10"})
 						</div>
-						<div class="grid grid-cols-7 gap-4">
+						<div class="grid grid-cols-8 gap-4">
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-14"})
+							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-16"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-28"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-20"})
 							@skeleton.Skeleton(skeleton.Props{Class: "h-3 w-16"})
@@ -487,6 +492,13 @@ func stripeDashboardURL(order *db.Order) string {
 		return "https://dashboard.stripe.com/checkout/sessions/" + order.StripeCheckoutSessionID
 	}
 	return ""
+}
+
+func orderCreatedLabel(order *db.Order) string {
+	if order == nil || order.CreatedAt.IsZero() {
+		return "—"
+	}
+	return humanize.Time(order.CreatedAt)
 }
 
 func humanizeFailureReason(reason string) string {
