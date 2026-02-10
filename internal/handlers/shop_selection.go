@@ -53,10 +53,18 @@ func (h *Handlers) ShopSelection(w http.ResponseWriter, r *http.Request) {
 
 	// If no shops, redirect to setup
 	if len(shops) == 0 {
-		sess.InstallationID = 0
-		sess.ShopID = uuid.Nil
-		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-			logger.Error("failed to clear stale installation from session", "error", updateErr)
+		totalShops, countErr := h.adminService.CountInstallationShops(ctx, sess.InstallationID)
+		if countErr != nil {
+			logger.Error("failed to count installation shops", "error", countErr, "installation_id", sess.InstallationID)
+			http.Error(w, "Failed to load shops", http.StatusInternalServerError)
+			return
+		}
+		if totalShops > 0 {
+			sess.InstallationID = 0
+			sess.ShopID = uuid.Nil
+			if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
+				logger.Error("failed to clear stale installation from session", "error", updateErr)
+			}
 		}
 		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
 		return

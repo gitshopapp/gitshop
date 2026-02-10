@@ -32,11 +32,23 @@ templ LoginPage(installationID string) {
 templ NoInstallationPage() {
 	@Layout(LayoutProps{ShowNav: false, HideHeader: true}) {
 		<div class="min-h-[50vh] flex items-center justify-center">
-			<div class="w-full max-w-md text-center">
-				<h1 class="text-xl font-semibold mb-4">Install the GitShop App</h1>
+			<div class="w-full max-w-md text-center space-y-4">
+				<h1 class="text-xl font-semibold">Install the GitShop App</h1>
 				<p class="text-muted-foreground">
 					Install the GitShop GitHub App on a repository to start selling.
 				</p>
+				<div>
+					@button.Button(button.Props{
+						Variant: button.VariantDefault,
+						Href:    "https://github.com/apps/gitshopapp",
+						Target:  "_blank",
+						Attributes: templ.Attributes{
+							"rel": "noopener",
+						},
+					}) {
+						Open GitShop App
+					}
+				</div>
 			</div>
 		</div>
 	}

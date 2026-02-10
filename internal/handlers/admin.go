@@ -37,6 +37,18 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if rawInstallationID := strings.TrimSpace(r.URL.Query().Get("installation_id")); rawInstallationID != "" {
+		installationID, err := parseInstallationID(rawInstallationID)
+		if err != nil {
+			http.Error(w, "Invalid installation_id", http.StatusBadRequest)
+			return
+		}
+		if installationID != sess.InstallationID {
+			http.Redirect(w, r, "/auth/github/login?installation_id="+rawInstallationID, http.StatusSeeOther)
+			return
+		}
+	}
+
 	if sess.InstallationID == 0 {
 		if err := views.NoInstallationPage().Render(ctx, w); err != nil {
 			h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
@@ -72,13 +84,25 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 		}
 		switch len(shops) {
 		case 0:
-			sess.InstallationID = 0
-			sess.ShopID = uuid.Nil
-			if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-				h.loggerFromContext(ctx).Error("failed to clear stale installation from session", "error", updateErr)
+			totalShops, countErr := h.adminService.CountInstallationShops(ctx, sess.InstallationID)
+			if countErr != nil {
+				h.loggerFromContext(ctx).Error("failed to count installation shops", "error", countErr, "installation_id", sess.InstallationID)
+				http.Error(w, "Failed to load shops", http.StatusInternalServerError)
+				return
 			}
-			if err := views.NoInstallationPage().Render(ctx, w); err != nil {
-				h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
+			if totalShops > 0 {
+				sess.InstallationID = 0
+				sess.ShopID = uuid.Nil
+				if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
+					h.loggerFromContext(ctx).Error("failed to clear stale installation from session", "error", updateErr)
+				}
+				if err := views.NoInstallationPage().Render(ctx, w); err != nil {
+					h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
+				}
+				return
+			}
+			if err := views.NoShopsPage().Render(ctx, w); err != nil {
+				h.loggerFromContext(ctx).Error("failed to render no shops page", "error", err)
 			}
 			return
 		case 1:

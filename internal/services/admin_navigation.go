@@ -73,6 +73,17 @@ func (s *AdminService) GetInstallationShops(ctx context.Context, installationID 
 	return shops, nil
 }
 
+func (s *AdminService) CountInstallationShops(ctx context.Context, installationID int64) (int, error) {
+	if s == nil || s.shopStore == nil {
+		return 0, fmt.Errorf("%w: shop store unavailable", ErrAdminServiceUnavailable)
+	}
+	if installationID <= 0 {
+		return 0, nil
+	}
+
+	return s.shopStore.CountShopsByInstallationID(ctx, installationID)
+}
+
 func (s *AdminService) GetShopForInstallation(ctx context.Context, installationID int64, shopID uuid.UUID) (*db.Shop, error) {
 	if s == nil || s.shopStore == nil {
 		return nil, fmt.Errorf("%w: shop store unavailable", ErrAdminServiceUnavailable)
