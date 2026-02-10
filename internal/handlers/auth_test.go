@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gitshopapp/gitshop/internal/session"
 )
 
 func TestParseInstallationID(t *testing.T) {
@@ -86,4 +89,90 @@ func TestGitHubCallback_MissingStateCookie_WithOAuthPayloadRedirectsToAdminLogin
 	if location := resp.Header.Get("Location"); location != "/admin/login" {
 		t.Fatalf("unexpected redirect location: got=%q", location)
 	}
+}
+
+func TestAdminLogin_AuthenticatedWithoutInstallationID_RedirectsToDashboard(t *testing.T) {
+	t.Parallel()
+
+	h, cookie := newAuthenticatedHandlerAndCookie(t, 111)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+
+	h.AdminLogin(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/admin/dashboard" {
+		t.Fatalf("unexpected redirect location: got=%q", location)
+	}
+}
+
+func TestAdminLogin_AuthenticatedWithInstallationID_RedirectsToGitHubLogin(t *testing.T) {
+	t.Parallel()
+
+	h, cookie := newAuthenticatedHandlerAndCookie(t, 111)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/login?installation_id=222", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+
+	h.AdminLogin(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/auth/github/login?installation_id=222" {
+		t.Fatalf("unexpected redirect location: got=%q", location)
+	}
+}
+
+func TestAdminLogin_InvalidInstallationID_ReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	h := &Handlers{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/login?installation_id=not-a-number", nil)
+	rec := httptest.NewRecorder()
+
+	h.AdminLogin(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func newAuthenticatedHandlerAndCookie(t *testing.T, installationID int64) (*Handlers, *http.Cookie) {
+	t.Helper()
+
+	sessionManager := session.NewManager(session.NewMemoryStore(), false)
+	h := &Handlers{
+		logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessionManager: sessionManager,
+	}
+
+	createRec := httptest.NewRecorder()
+	_, err := sessionManager.CreateSession(context.Background(), createRec, &session.Data{
+		UserID:         1,
+		GitHubUsername: "octocat",
+		InstallationID: installationID,
+	})
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	resp := createRec.Result()
+	cookies := resp.Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected session cookie to be set")
+	}
+
+	return h, cookies[0]
 }

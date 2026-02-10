@@ -229,13 +229,30 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) AdminLogin(w http.ResponseWriter, r *http.Request) {
 	logger := h.loggerFromContext(r.Context())
 
+	var requestedInstallationID int64
+	if rawInstallationID := strings.TrimSpace(r.URL.Query().Get("installation_id")); rawInstallationID != "" {
+		parsedInstallationID, err := parseInstallationID(rawInstallationID)
+		if err != nil {
+			http.Error(w, "Invalid installation_id", http.StatusBadRequest)
+			return
+		}
+		requestedInstallationID = parsedInstallationID
+	}
+
 	_, err := h.sessionManager.GetSession(r.Context(), r)
 	if err == nil {
+		if requestedInstallationID > 0 {
+			http.Redirect(w, r, fmt.Sprintf("/auth/github/login?installation_id=%d", requestedInstallationID), http.StatusSeeOther)
+			return
+		}
 		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 		return
 	}
 
-	installationID := r.URL.Query().Get("installation_id")
+	installationID := ""
+	if requestedInstallationID > 0 {
+		installationID = strconv.FormatInt(requestedInstallationID, 10)
+	}
 	if err := views.LoginPage(installationID).Render(r.Context(), w); err != nil {
 		logger.Error("failed to render login page", "error", err)
 	}

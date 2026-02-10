@@ -42,13 +42,12 @@ type StripeConnectStatus struct {
 }
 
 type CompleteOnboardingResult struct {
-	ShopID            uuid.UUID
-	AccountID         string
-	Connected         bool
-	DetailsSubmitted  bool
-	ChargesEnabled    bool
-	PayoutsEnabled    bool
-	RedirectQueryPart string
+	ShopID           uuid.UUID
+	AccountID        string
+	Connected        bool
+	DetailsSubmitted bool
+	ChargesEnabled   bool
+	PayoutsEnabled   bool
 }
 
 type StripeConnectService struct {
@@ -168,15 +167,10 @@ func (s *StripeConnectService) CompleteOnboarding(ctx context.Context, state str
 	result = CompleteOnboardingResult{
 		ShopID:           shopID,
 		AccountID:        shop.StripeConnectAccountID,
-		Connected:        account.ChargesEnabled && account.PayoutsEnabled,
+		Connected:        account.DetailsSubmitted, // as long as the user submitted their details we can continue with setup
 		DetailsSubmitted: account.DetailsSubmitted,
 		ChargesEnabled:   account.ChargesEnabled,
 		PayoutsEnabled:   account.PayoutsEnabled,
-	}
-	if result.Connected {
-		result.RedirectQueryPart = "stripe=connected"
-	} else {
-		result.RedirectQueryPart = "stripe=pending"
 	}
 
 	return result, nil

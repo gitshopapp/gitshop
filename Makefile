@@ -4,10 +4,17 @@
 .PHONY: help
 .DEFAULT_GOAL := help
 
+ifneq (,$(wildcard .env))
+include .env
+endif
+
 DC ?= docker compose
 RUN_DEV := $(DC) run --rm gitshop-dev
 RUN_MIGRATE := $(DC) run --rm migrate
-MIGRATE_DB ?= postgres://gitshop:gitshop@postgres:5432/gitshop?sslmode=disable
+MIGRATE_DB ?= $(DATABASE_URL)
+ifeq ($(strip $(MIGRATE_DB)),)
+MIGRATE_DB := postgres://gitshop:gitshop@postgres:5432/gitshop?sslmode=disable
+endif
 MIGRATE_ARGS := -path=/migrations/ -database $(MIGRATE_DB)
 PROD_IMAGE_TAG ?= gitshop:prod
 GOLANGCI_LINT_VERSION ?= v2.8.0
