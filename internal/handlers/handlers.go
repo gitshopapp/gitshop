@@ -19,7 +19,6 @@ import (
 	"github.com/gitshopapp/gitshop/internal/logging"
 	"github.com/gitshopapp/gitshop/internal/services"
 	"github.com/gitshopapp/gitshop/internal/session"
-	"github.com/gitshopapp/gitshop/ui/views"
 )
 
 const maxWebhookBodyBytes = 1 << 20 // 1 MB
@@ -152,7 +151,6 @@ func (h *Handlers) RequireAuth(next http.Handler) http.Handler {
 }
 
 func (h *Handlers) Root(w http.ResponseWriter, r *http.Request) {
-	logger := h.loggerFromContext(r.Context())
 	session, err := h.sessionManager.GetSession(r.Context(), r)
 	if err != nil || session == nil {
 		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
@@ -160,9 +158,7 @@ func (h *Handlers) Root(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if session.InstallationID == 0 {
-		if err := views.NoInstallationPage().Render(r.Context(), w); err != nil {
-			logger.Error("failed to render no installation page", "error", err)
-		}
+		http.Redirect(w, r, "/auth/github/login", http.StatusSeeOther)
 		return
 	}
 
