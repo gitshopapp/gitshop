@@ -158,6 +158,7 @@ func (h *Handlers) Root(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if session.InstallationID == 0 {
+		h.loggerFromContext(r.Context()).Info("installation id in session is 0", "route", "root", "username", session.GitHubUsername)
 		http.Redirect(w, r, "/auth/github/login", http.StatusSeeOther)
 		return
 	}

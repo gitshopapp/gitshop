@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -50,6 +51,7 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sess.InstallationID == 0 {
+		h.loggerFromContext(ctx).Info("installation id in session is 0", "route", "admin.setup", "username", sess.GitHubUsername)
 		if err := views.NoInstallationPage().Render(ctx, w); err != nil {
 			h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
 		}
@@ -90,15 +92,9 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Failed to load shops", http.StatusInternalServerError)
 				return
 			}
+			// No connected shops but existing rows means the installation context in session is stale.
 			if totalShops > 0 {
-				sess.InstallationID = 0
-				sess.ShopID = uuid.Nil
-				if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-					h.loggerFromContext(ctx).Error("failed to clear stale installation from session", "error", updateErr)
-				}
-				if err := views.NoInstallationPage().Render(ctx, w); err != nil {
-					h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
-				}
+				h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.setup")
 				return
 			}
 			if err := views.NoShopsPage().Render(ctx, w); err != nil {
@@ -129,16 +125,7 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !shop.IsConnected() {
-		sess.InstallationID = 0
-		sess.ShopID = uuid.Nil
-		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-			h.loggerFromContext(ctx).Error("failed to clear disconnected shop from session", "error", updateErr, "installation_id", sess.InstallationID)
-			http.Error(w, "Failed to update session", http.StatusInternalServerError)
-			return
-		}
-		if err := views.NoInstallationPage().Render(ctx, w); err != nil {
-			h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
-		}
+		h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.setup")
 		return
 	}
 
@@ -344,12 +331,7 @@ func (h *Handlers) adminShop(ctx context.Context, w http.ResponseWriter, r *http
 		return nil, false
 	}
 	if !shop.IsConnected() {
-		sess.InstallationID = 0
-		sess.ShopID = uuid.Nil
-		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-			h.loggerFromContext(ctx).Error("failed to clear disconnected shop from session", "error", updateErr)
-		}
-		h.htmxRedirect(w, r, "/admin/setup")
+		h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.shop")
 		return nil, false
 	}
 
@@ -370,6 +352,33 @@ func (h *Handlers) htmxRedirect(w http.ResponseWriter, r *http.Request, url stri
 	http.Redirect(w, r, url, http.StatusSeeOther)
 }
 
+func (h *Handlers) recoverStaleInstallationContext(ctx context.Context, w http.ResponseWriter, r *http.Request, sess *session.Data, route string) {
+	if sess == nil {
+		h.htmxRedirect(w, r, "/auth/github/login")
+		return
+	}
+
+	oldInstallationID := sess.InstallationID
+	oldShopID := sess.ShopID
+
+	sess.InstallationID = 0
+	sess.ShopID = uuid.Nil
+	if err := h.sessionManager.UpdateSession(ctx, r, sess); err != nil {
+		h.loggerFromContext(ctx).Error("failed to clear stale installation from session", "error", err, "route", route, "old_installation_id", oldInstallationID, "old_shop_id", oldShopID)
+		http.Error(w, "Failed to update session", http.StatusInternalServerError)
+		return
+	}
+
+	redirectURL := "/auth/github/login"
+	if oldInstallationID > 0 {
+		// Preserve installation hint so GitHub OAuth can prioritize the expected installation.
+		redirectURL = fmt.Sprintf("/auth/github/login?installation_id=%d", oldInstallationID)
+	}
+
+	h.loggerFromContext(ctx).Warn("stale installation in context, redirecting to auth", "route", route, "old_installation_id", oldInstallationID, "old_shop_id", oldShopID)
+	h.htmxRedirect(w, r, redirectURL)
+}
+
 func (h *Handlers) buildRepoStatus(ctx context.Context, shop *db.Shop) *views.RepoStatus {
 	return repoStatusToView(h.adminService.BuildRepoStatus(ctx, shop))
 }
@@ -385,6 +394,7 @@ func (h *Handlers) shopFromSession(ctx context.Context, r *http.Request) (*db.Sh
 		return nil, false
 	}
 	if !shop.IsConnected() {
+		// Keep this non-redirecting: callers decide how to recover UI flow from missing shop context.
 		sess.InstallationID = 0
 		sess.ShopID = uuid.Nil
 		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {

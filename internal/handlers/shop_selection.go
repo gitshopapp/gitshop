@@ -25,6 +25,7 @@ func (h *Handlers) ShopSelection(w http.ResponseWriter, r *http.Request) {
 
 	// If user has no installation_id, redirect to dashboard
 	if sess.InstallationID == 0 {
+		logger.Info("installation id in session is 0", "route", "admin.shops", "username", sess.GitHubUsername)
 		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
 		return
 	}
@@ -59,12 +60,10 @@ func (h *Handlers) ShopSelection(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to load shops", http.StatusInternalServerError)
 			return
 		}
+		// This indicates a stale installation in session (disconnected rows exist, but none are active).
 		if totalShops > 0 {
-			sess.InstallationID = 0
-			sess.ShopID = uuid.Nil
-			if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-				logger.Error("failed to clear stale installation from session", "error", updateErr)
-			}
+			h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.shops")
+			return
 		}
 		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
 		return
