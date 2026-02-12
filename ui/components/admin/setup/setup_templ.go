@@ -150,7 +150,7 @@ func WelcomeCard(repoFullName, ownerName string, repoCount int) templ.Component 
 	})
 }
 
-func ChecklistCard(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus, yamlStatus *GitShopYAMLStatus, templateStatus *OrderTemplateStatus) templ.Component {
+func ChecklistCard(needsStripe, needsEmail, setupComplete bool, labelsStatus *RepoLabelsStatus, yamlStatus *GitShopYAMLStatus, templateStatus *OrderTemplateStatus) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -657,6 +657,12 @@ func ChecklistCard(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus,
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+				if setupComplete {
+					templ_7745c5c3_Err = ReadyBanner().Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -705,7 +711,7 @@ func checklistItem(step, title, description string, ready bool, readyLabel strin
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(step)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 146, Col: 118}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 150, Col: 118}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 		if templ_7745c5c3_Err != nil {
@@ -718,7 +724,7 @@ func checklistItem(step, title, description string, ready bool, readyLabel strin
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 148, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 152, Col: 33}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 		if templ_7745c5c3_Err != nil {
@@ -731,7 +737,7 @@ func checklistItem(step, title, description string, ready bool, readyLabel strin
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 149, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 153, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 		if templ_7745c5c3_Err != nil {
@@ -757,7 +763,7 @@ func checklistItem(step, title, description string, ready bool, readyLabel strin
 				var templ_7745c5c3_Var33 string
 				templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(readyLabel)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 153, Col: 16}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 157, Col: 16}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 				if templ_7745c5c3_Err != nil {
@@ -1069,7 +1075,7 @@ func YAMLStatusCard(yamlStatus *GitShopYAMLStatus) templ.Component {
 					var templ_7745c5c3_Var46 string
 					templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(yamlStatus.ErrorMessage)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 200, Col: 70}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 204, Col: 70}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 					if templ_7745c5c3_Err != nil {
@@ -1103,7 +1109,7 @@ func YAMLStatusCard(yamlStatus *GitShopYAMLStatus) templ.Component {
 						var templ_7745c5c3_Var47 string
 						templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(yamlStatus.LastUpdatedLabel)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 208, Col: 93}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 212, Col: 93}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 						if templ_7745c5c3_Err != nil {
@@ -1337,7 +1343,7 @@ func TemplateStatusCard(templateStatus *OrderTemplateStatus) templ.Component {
 					var templ_7745c5c3_Var56 string
 					templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(templateStatus.ErrorMessage)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 244, Col: 74}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 248, Col: 74}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 					if templ_7745c5c3_Err != nil {
@@ -1371,7 +1377,7 @@ func TemplateStatusCard(templateStatus *OrderTemplateStatus) templ.Component {
 						var templ_7745c5c3_Var57 string
 						templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(templateStatus.LastUpdatedLabel)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 252, Col: 97}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 256, Col: 97}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 						if templ_7745c5c3_Err != nil {
@@ -1394,7 +1400,7 @@ func TemplateStatusCard(templateStatus *OrderTemplateStatus) templ.Component {
 						var templ_7745c5c3_Var58 string
 						templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(templateStatus.UnknownSKUs, ", "))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 255, Col: 108}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 259, Col: 108}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 						if templ_7745c5c3_Err != nil {
@@ -1417,7 +1423,7 @@ func TemplateStatusCard(templateStatus *OrderTemplateStatus) templ.Component {
 						var templ_7745c5c3_Var59 string
 						templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(templateStatus.PriceMismatches, ", "))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 258, Col: 116}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 262, Col: 116}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 						if templ_7745c5c3_Err != nil {
@@ -1440,7 +1446,7 @@ func TemplateStatusCard(templateStatus *OrderTemplateStatus) templ.Component {
 						var templ_7745c5c3_Var60 string
 						templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(templateStatus.OptionMismatches, ", "))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 261, Col: 118}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 265, Col: 118}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 						if templ_7745c5c3_Err != nil {
@@ -1496,7 +1502,7 @@ func TemplateStatusCard(templateStatus *OrderTemplateStatus) templ.Component {
 							var templ_7745c5c3_Var62 string
 							templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(templateStatus.SyncMessage)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 272, Col: 80}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/components/admin/setup/setup.templ`, Line: 276, Col: 80}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 							if templ_7745c5c3_Err != nil {
@@ -1624,7 +1630,7 @@ func ReadyBanner() templ.Component {
 			templ_7745c5c3_Var65 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 104, "<div class=\"mt-6 rounded-xl border border-border/60 bg-muted/30 p-4\"><p class=\"font-medium\">You are ready to sell.</p><p class=\"text-sm text-muted-foreground\">Head to the dashboard to monitor orders.</p><div class=\"mt-4\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 104, "<div class=\"rounded-xl border border-border/60 bg-muted/30 p-4\"><p class=\"font-medium\">You are ready to sell.</p><p class=\"text-sm text-muted-foreground\">Head to the dashboard to monitor orders.</p><div class=\"mt-4\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

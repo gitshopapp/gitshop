@@ -61,7 +61,7 @@ templ WelcomeCard(repoFullName, ownerName string, repoCount int) {
 	</div>
 }
 
-templ ChecklistCard(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus, yamlStatus *GitShopYAMLStatus, templateStatus *OrderTemplateStatus) {
+templ ChecklistCard(needsStripe, needsEmail, setupComplete bool, labelsStatus *RepoLabelsStatus, yamlStatus *GitShopYAMLStatus, templateStatus *OrderTemplateStatus) {
 	@card.Card() {
 		@card.Header() {
 			@card.Title() { Setup Checklist }
@@ -135,6 +135,10 @@ templ ChecklistCard(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus
 							}
 						</form>
 					}
+				}
+
+				if setupComplete {
+					@ReadyBanner()
 				}
 			</div>
 		}
@@ -296,7 +300,7 @@ templ TemplateStatusCard(templateStatus *OrderTemplateStatus) {
 }
 
 templ ReadyBanner() {
-	<div class="mt-6 rounded-xl border border-border/60 bg-muted/30 p-4">
+	<div class="rounded-xl border border-border/60 bg-muted/30 p-4">
 		<p class="font-medium">You are ready to sell.</p>
 		<p class="text-sm text-muted-foreground">Head to the dashboard to monitor orders.</p>
 		<div class="mt-4">

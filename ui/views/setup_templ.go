@@ -62,7 +62,7 @@ func SetupPage(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus, yam
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = setupcmp.ChecklistCard(needsStripe, needsEmail, labelsStatus, yamlStatus, templateStatus).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = setupcmp.ChecklistCard(needsStripe, needsEmail, setupComplete, labelsStatus, yamlStatus, templateStatus).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -91,12 +91,6 @@ func SetupPage(needsStripe, needsEmail bool, labelsStatus *RepoLabelsStatus, yam
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
-			}
-			if setupComplete {
-				templ_7745c5c3_Err = setupcmp.ReadyBanner().Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
 			}
 			return nil
 		})
