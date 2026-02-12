@@ -37,6 +37,8 @@ templ Layout(props LayoutProps, children ...templ.Component) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>GitShop</title>
+			<link rel="icon" type="image/png" sizes="32x32" href={ templ.SafeURL(utils.ScriptURL("/assets/img/favicon-32.png")) }/>
+			<link rel="apple-touch-icon" href={ templ.SafeURL(utils.ScriptURL("/assets/img/favicon-32.png")) }/>
 			<link rel="stylesheet" href={ templ.SafeURL(utils.ScriptURL("/assets/css/app.css")) }/>
 		</head>
 		<body class="min-h-screen bg-background text-foreground antialiased">
@@ -50,7 +52,7 @@ templ Layout(props LayoutProps, children ...templ.Component) {
 					<header class="border-b border-border/60 bg-background/80 backdrop-blur">
 						<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
 							<a href="/admin/dashboard" class="flex items-center gap-2 text-lg font-semibold tracking-tight">
-								<span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-foreground text-background text-sm">GS</span>
+								<img src={ templ.SafeURL(utils.ScriptURL("/assets/img/favicon-32.png")) } alt="GitShop logo" class="h-8 w-8 rounded-xl object-cover"/>
 								GitShop
 							</a>
 							<nav class="flex items-center gap-2">
