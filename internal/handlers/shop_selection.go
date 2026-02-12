@@ -15,20 +15,13 @@ func (h *Handlers) ShopSelection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := h.loggerFromContext(ctx)
 
-	// Get session
-	sess, err := h.sessionManager.GetSession(ctx, r)
-	if err != nil {
-		logger.Info("user not authenticated, redirecting to login")
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route: "admin.shops",
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
-
-	// If user has no installation_id, redirect to dashboard
-	if sess.InstallationID == 0 {
-		logger.Info("installation id in session is 0", "route", "admin.shops", "username", sess.GitHubUsername)
-		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
-		return
-	}
+	sess := contextResult.Session
 
 	// Get all shops for this installation
 	shops, err := h.adminService.GetInstallationShops(ctx, sess.InstallationID)
@@ -54,15 +47,7 @@ func (h *Handlers) ShopSelection(w http.ResponseWriter, r *http.Request) {
 
 	// If no shops, redirect to setup
 	if len(shops) == 0 {
-		totalShops, countErr := h.adminService.CountInstallationShops(ctx, sess.InstallationID)
-		if countErr != nil {
-			logger.Error("failed to count installation shops", "error", countErr, "installation_id", sess.InstallationID)
-			http.Error(w, "Failed to load shops", http.StatusInternalServerError)
-			return
-		}
-		// This indicates a stale installation in session (disconnected rows exist, but none are active).
-		if totalShops > 0 {
-			h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.shops")
+		if h.handleNoConnectedShops(ctx, w, r, sess, "admin.shops") {
 			return
 		}
 		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
@@ -112,11 +97,13 @@ func (h *Handlers) SelectShop(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get session and update it with the selected shop
-	sess, err := h.sessionManager.GetSession(r.Context(), r)
-	if err != nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(r.Context(), r, AdminContextRequirements{
+		Route: "admin.shops.select",
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	sess := contextResult.Session
 
 	shop, err := h.adminService.GetShopForInstallation(r.Context(), sess.InstallationID, shopID)
 	if err != nil {

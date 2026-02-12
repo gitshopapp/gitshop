@@ -126,6 +126,7 @@ func (s *Server) buildRouter() *mux.Router {
 	adminRouter.HandleFunc("/settings/email", h.AdminSettingsEmail).Methods("POST").Name("admin.settings.email")
 	adminRouter.HandleFunc("/orders/{id}/ship", h.AdminShipOrder).Methods("POST").Name("admin.orders.ship")
 	adminRouter.HandleFunc("/template/sync", h.AdminSyncTemplate).Methods("POST").Name("admin.template.sync")
+	adminRouter.HandleFunc("/no-installations", h.NoInstallation).Methods("GET").Name("admin.no_installations")
 
 	// Stripe Connect Standard Account onboarding routes
 	adminRouter.HandleFunc("/stripe/onboard", h.StripeOnboardAccount).Methods("POST").Name("admin.stripe.onboard")

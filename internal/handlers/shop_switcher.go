@@ -10,7 +10,7 @@ import (
 )
 
 func (h *Handlers) buildShopSwitcher(ctx context.Context, sess *session.Data) *views.ShopSwitcherProps {
-	if sess == nil || sess.InstallationID == 0 {
+	if sess == nil || sess.InstallationID <= 0 {
 		return nil
 	}
 

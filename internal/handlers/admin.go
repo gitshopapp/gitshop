@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/gitshopapp/gitshop/internal/db"
 	"github.com/gitshopapp/gitshop/internal/services"
-	"github.com/gitshopapp/gitshop/internal/session"
 	"github.com/gitshopapp/gitshop/ui/views"
 )
 
@@ -31,32 +29,15 @@ func (h *Handlers) renderSuccess(w http.ResponseWriter, ctx context.Context, msg
 
 func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	sess := session.GetSessionFromContext(ctx)
-	if sess == nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	logger := h.loggerFromContext(ctx)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                          "admin.setup",
+		AllowInstallationQueryOverride: true,
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
-
-	if rawInstallationID := strings.TrimSpace(r.URL.Query().Get("installation_id")); rawInstallationID != "" {
-		installationID, err := parseInstallationID(rawInstallationID)
-		if err != nil {
-			http.Error(w, "Invalid installation_id", http.StatusBadRequest)
-			return
-		}
-		if installationID != sess.InstallationID {
-			http.Redirect(w, r, "/auth/github/login?installation_id="+rawInstallationID, http.StatusSeeOther)
-			return
-		}
-	}
-
-	if sess.InstallationID == 0 {
-		h.loggerFromContext(ctx).Info("installation id in session is 0", "route", "admin.setup", "username", sess.GitHubUsername)
-		if err := views.NoInstallationPage().Render(ctx, w); err != nil {
-			h.loggerFromContext(ctx).Error("failed to render no installation page", "error", err)
-		}
-		return
-	}
+	sess := contextResult.Session
 
 	if shopIDParam := r.URL.Query().Get("shop_id"); shopIDParam != "" {
 		shopID, err := uuid.Parse(shopIDParam)
@@ -73,38 +54,30 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 
 		sess.ShopID = shopID
 		if err := h.sessionManager.UpdateSession(ctx, r, sess); err != nil {
-			h.loggerFromContext(ctx).Error("failed to update session with shop selection", "error", err)
+			logger.Error("failed to update session with shop selection", "error", err)
 		}
 	}
 
 	if sess.ShopID == uuid.Nil {
 		shops, err := h.adminService.GetInstallationShops(ctx, sess.InstallationID)
 		if err != nil {
-			h.loggerFromContext(ctx).Error("failed to load installation shops for setup", "error", err, "installation_id", sess.InstallationID)
+			logger.Error("failed to load installation shops for setup", "error", err, "installation_id", sess.InstallationID)
 			http.Error(w, "Failed to load shops", http.StatusInternalServerError)
 			return
 		}
 		switch len(shops) {
 		case 0:
-			totalShops, countErr := h.adminService.CountInstallationShops(ctx, sess.InstallationID)
-			if countErr != nil {
-				h.loggerFromContext(ctx).Error("failed to count installation shops", "error", countErr, "installation_id", sess.InstallationID)
-				http.Error(w, "Failed to load shops", http.StatusInternalServerError)
-				return
-			}
-			// No connected shops but existing rows means the installation context in session is stale.
-			if totalShops > 0 {
-				h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.setup")
+			if h.handleNoConnectedShops(ctx, w, r, sess, "admin.setup") {
 				return
 			}
 			if err := views.NoShopsPage().Render(ctx, w); err != nil {
-				h.loggerFromContext(ctx).Error("failed to render no shops page", "error", err)
+				logger.Error("failed to render no shops page", "error", err)
 			}
 			return
 		case 1:
 			sess.ShopID = shops[0].ID
 			if err := h.sessionManager.UpdateSession(ctx, r, sess); err != nil {
-				h.loggerFromContext(ctx).Error("failed to update session", "error", err)
+				logger.Error("failed to update session", "error", err)
 			}
 		default:
 			http.Redirect(w, r, "/admin/shops", http.StatusSeeOther)
@@ -114,10 +87,10 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 
 	shop, err := h.adminService.GetShopForInstallation(ctx, sess.InstallationID, sess.ShopID)
 	if err != nil {
-		h.loggerFromContext(ctx).Warn("active shop is no longer available for installation", "error", err, "shop_id", sess.ShopID, "installation_id", sess.InstallationID)
+		logger.Warn("active shop is no longer available for installation", "error", err, "shop_id", sess.ShopID, "installation_id", sess.InstallationID)
 		sess.ShopID = uuid.Nil
 		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-			h.loggerFromContext(ctx).Error("failed to clear unavailable shop from session", "error", updateErr, "installation_id", sess.InstallationID)
+			logger.Error("failed to clear unavailable shop from session", "error", updateErr, "installation_id", sess.InstallationID)
 			http.Error(w, "Failed to load shop", http.StatusInternalServerError)
 			return
 		}
@@ -126,6 +99,10 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	if !shop.IsConnected() {
 		h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.setup")
+		return
+	}
+	if h.adminService.IsOnboarded(shop) {
+		h.htmxRedirect(w, r, "/admin/dashboard")
 		return
 	}
 
@@ -146,7 +123,7 @@ func (h *Handlers) AdminSetup(w http.ResponseWriter, r *http.Request) {
 	labelsStatus, yamlStatus, templateStatus, setupComplete := h.buildSetupStatus(ctx, shop, r.URL.Query(), stripeReady)
 
 	if err := views.SetupPage(needsStripe, needsEmail, labelsStatus, yamlStatus, templateStatus, shop, ownerName, repoCount, setupComplete).Render(ctx, w); err != nil {
-		h.loggerFromContext(ctx).Error("failed to render setup page", "error", err)
+		logger.Error("failed to render setup page", "error", err)
 	}
 }
 
@@ -164,12 +141,15 @@ func (h *Handlers) AdminSetupComplete(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminSetupLabels(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	shop, ok := h.shopFromSession(ctx, r)
-	if !ok {
-		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                  "admin.setup.labels",
+		RequireShop:            true,
+		MissingShopRedirectURL: "/admin/setup",
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shop := contextResult.Shop
 
 	if err := h.adminService.EnsureRepoLabels(ctx, shop); err != nil {
 		http.Redirect(w, r, "/admin/setup?labels_error="+url.QueryEscape(err.Error()), http.StatusSeeOther)
@@ -181,12 +161,15 @@ func (h *Handlers) AdminSetupLabels(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminSetupYAML(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	shop, ok := h.shopFromSession(ctx, r)
-	if !ok {
-		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                  "admin.setup.yaml",
+		RequireShop:            true,
+		MissingShopRedirectURL: "/admin/setup",
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shop := contextResult.Shop
 
 	result, err := h.adminService.EnsureGitShopYAML(ctx, shop)
 	if err != nil {
@@ -208,12 +191,15 @@ func (h *Handlers) AdminSetupYAML(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminSetupTemplate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	shop, ok := h.shopFromSession(ctx, r)
-	if !ok {
-		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                  "admin.setup.template",
+		RequireShop:            true,
+		MissingShopRedirectURL: "/admin/setup",
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shop := contextResult.Shop
 
 	result, err := h.adminService.EnsureOrderTemplate(ctx, shop)
 	if err != nil {
@@ -235,12 +221,15 @@ func (h *Handlers) AdminSetupTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminSyncTemplate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	shop, ok := h.shopFromSession(ctx, r)
-	if !ok {
-		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                  "admin.template.sync",
+		RequireShop:            true,
+		MissingShopRedirectURL: "/admin/setup",
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shop := contextResult.Shop
 
 	prURL, err := h.adminService.SyncOrderTemplates(ctx, shop)
 	if err != nil {
@@ -258,15 +247,16 @@ func (h *Handlers) AdminSyncTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	shop, ok := h.adminShop(ctx, w, r, false)
-	if !ok {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                     "admin.dashboard",
+		RequireShop:               true,
+		RequireOnboardingComplete: true,
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
-	sess := session.GetSessionFromContext(ctx)
-	if sess == nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
-		return
-	}
+	shop := contextResult.Shop
+	sess := contextResult.Session
 	shopSwitcher := h.buildShopSwitcher(ctx, sess)
 
 	var toastPayload *views.ToastPayload
@@ -285,10 +275,15 @@ func (h *Handlers) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminDashboardStorefront(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	shop, ok := h.adminShop(ctx, w, r, false)
-	if !ok {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                     "admin.dashboard.storefront",
+		RequireShop:               true,
+		RequireOnboardingComplete: true,
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shop := contextResult.Shop
 
 	repoStatus := h.buildRepoStatus(ctx, shop)
 	if err := views.DashboardStorefrontSection(repoStatus).Render(ctx, w); err != nil {
@@ -298,10 +293,15 @@ func (h *Handlers) AdminDashboardStorefront(w http.ResponseWriter, r *http.Reque
 
 func (h *Handlers) AdminDashboardOrders(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	shop, ok := h.adminShop(ctx, w, r, false)
-	if !ok {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                     "admin.dashboard.orders",
+		RequireShop:               true,
+		RequireOnboardingComplete: true,
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shop := contextResult.Shop
 
 	orders, err := h.adminService.GetRecentOrders(ctx, shop.ID, 20)
 	if err != nil {
@@ -314,35 +314,6 @@ func (h *Handlers) AdminDashboardOrders(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *Handlers) adminShop(ctx context.Context, w http.ResponseWriter, r *http.Request, requireSetup bool) (*db.Shop, bool) {
-	sess := session.GetSessionFromContext(ctx)
-	if sess == nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
-		return nil, false
-	}
-	if sess.ShopID == uuid.Nil {
-		h.htmxRedirect(w, r, "/admin/setup")
-		return nil, false
-	}
-
-	shop, err := h.adminService.GetShopForInstallation(ctx, sess.InstallationID, sess.ShopID)
-	if err != nil {
-		http.Error(w, "Shop not found", http.StatusNotFound)
-		return nil, false
-	}
-	if !shop.IsConnected() {
-		h.recoverStaleInstallationContext(ctx, w, r, sess, "admin.shop")
-		return nil, false
-	}
-
-	if requireSetup && !h.adminService.IsOnboardingComplete(ctx, shop) {
-		h.htmxRedirect(w, r, "/admin/setup")
-		return nil, false
-	}
-
-	return shop, true
-}
-
 func (h *Handlers) htmxRedirect(w http.ResponseWriter, r *http.Request, url string) {
 	if strings.EqualFold(r.Header.Get("HX-Request"), "true") {
 		w.Header().Set("HX-Redirect", url)
@@ -352,58 +323,8 @@ func (h *Handlers) htmxRedirect(w http.ResponseWriter, r *http.Request, url stri
 	http.Redirect(w, r, url, http.StatusSeeOther)
 }
 
-func (h *Handlers) recoverStaleInstallationContext(ctx context.Context, w http.ResponseWriter, r *http.Request, sess *session.Data, route string) {
-	if sess == nil {
-		h.htmxRedirect(w, r, "/auth/github/login")
-		return
-	}
-
-	oldInstallationID := sess.InstallationID
-	oldShopID := sess.ShopID
-
-	sess.InstallationID = 0
-	sess.ShopID = uuid.Nil
-	if err := h.sessionManager.UpdateSession(ctx, r, sess); err != nil {
-		h.loggerFromContext(ctx).Error("failed to clear stale installation from session", "error", err, "route", route, "old_installation_id", oldInstallationID, "old_shop_id", oldShopID)
-		http.Error(w, "Failed to update session", http.StatusInternalServerError)
-		return
-	}
-
-	redirectURL := "/auth/github/login"
-	if oldInstallationID > 0 {
-		// Preserve installation hint so GitHub OAuth can prioritize the expected installation.
-		redirectURL = fmt.Sprintf("/auth/github/login?installation_id=%d", oldInstallationID)
-	}
-
-	h.loggerFromContext(ctx).Warn("stale installation in context, redirecting to auth", "route", route, "old_installation_id", oldInstallationID, "old_shop_id", oldShopID)
-	h.htmxRedirect(w, r, redirectURL)
-}
-
 func (h *Handlers) buildRepoStatus(ctx context.Context, shop *db.Shop) *views.RepoStatus {
 	return repoStatusToView(h.adminService.BuildRepoStatus(ctx, shop))
-}
-
-func (h *Handlers) shopFromSession(ctx context.Context, r *http.Request) (*db.Shop, bool) {
-	sess := session.GetSessionFromContext(ctx)
-	if sess == nil || sess.ShopID == uuid.Nil {
-		return nil, false
-	}
-
-	shop, err := h.adminService.GetShopForInstallation(ctx, sess.InstallationID, sess.ShopID)
-	if err != nil {
-		return nil, false
-	}
-	if !shop.IsConnected() {
-		// Keep this non-redirecting: callers decide how to recover UI flow from missing shop context.
-		sess.InstallationID = 0
-		sess.ShopID = uuid.Nil
-		if updateErr := h.sessionManager.UpdateSession(ctx, r, sess); updateErr != nil {
-			h.loggerFromContext(ctx).Error("failed to clear disconnected shop from session", "error", updateErr)
-		}
-		return nil, false
-	}
-
-	return shop, true
 }
 
 func (h *Handlers) buildSetupStatus(ctx context.Context, shop *db.Shop, query url.Values, stripeReady bool) (*views.RepoLabelsStatus, *views.GitShopYAMLStatus, *views.OrderTemplateStatus, bool) {
@@ -475,6 +396,8 @@ func repoStatusToView(status *services.RepoStatus) *views.RepoStatus {
 	}
 
 	return &views.RepoStatus{
+		StripeReady:              status.StripeReady,
+		EmailConfigured:          status.EmailConfigured,
 		YAMLExists:               status.YAMLExists,
 		YAMLValid:                status.YAMLValid,
 		YAMLURL:                  status.YAMLURL,
@@ -532,22 +455,16 @@ func templateStatusToView(status services.OrderTemplateStatus) *views.OrderTempl
 }
 func (h *Handlers) AdminSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	sess := session.GetSessionFromContext(ctx)
-	if sess == nil || sess.ShopID == uuid.Nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                     "admin.settings",
+		RequireShop:               true,
+		RequireOnboardingComplete: true,
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
-
-	shop, err := h.adminService.GetShopForInstallation(ctx, sess.InstallationID, sess.ShopID)
-	if err != nil {
-		http.Error(w, "Shop not found", http.StatusNotFound)
-		return
-	}
-
-	if !h.adminService.IsOnboardingComplete(ctx, shop) {
-		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
-		return
-	}
+	shop := contextResult.Shop
+	sess := contextResult.Session
 
 	shopSwitcher := h.buildShopSwitcher(ctx, sess)
 	if err := views.SettingsPage(shop, shopSwitcher).Render(ctx, w); err != nil {
@@ -565,12 +482,20 @@ func (h *Handlers) AdminSettingsEmail(w http.ResponseWriter, r *http.Request) {
 
 	provider := r.FormValue("provider")
 
-	sess := session.GetSessionFromContext(ctx)
-	if sess == nil || sess.ShopID == uuid.Nil {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                  "admin.settings.email",
+		RequireShop:            true,
+		MissingShopRedirectURL: "/admin/setup",
+	})
+	if contextResult.Decision != AdminContextDecisionAllow {
+		if contextResult.Decision == AdminContextDecisionInternalError {
+			h.renderError(w, ctx, "Failed to load shop context")
+			return
+		}
 		h.renderError(w, ctx, "Not authenticated")
 		return
 	}
-	shopID := sess.ShopID
+	shopID := contextResult.Shop.ID
 
 	apiKey := r.FormValue("api_key")
 	from := r.FormValue("from_email")
@@ -595,16 +520,24 @@ func (h *Handlers) AdminSettingsEmail(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) AdminShipOrder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	sess := session.GetSessionFromContext(ctx)
-	if sess == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	if sess.ShopID == uuid.Nil {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:                  "admin.orders.ship",
+		RequireShop:            true,
+		MissingShopRedirectURL: "/admin/setup",
+	})
+	if contextResult.Decision != AdminContextDecisionAllow {
+		if contextResult.Decision == AdminContextDecisionInternalError {
+			http.Error(w, "Failed to load shop", http.StatusInternalServerError)
+			return
+		}
+		if contextResult.Session == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		http.Error(w, "Shop not found", http.StatusBadRequest)
 		return
 	}
+	shopID := contextResult.Shop.ID
 
 	vars := mux.Vars(r)
 	orderIDStr := vars["id"]
@@ -620,7 +553,7 @@ func (h *Handlers) AdminShipOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.adminService.ShipOrder(ctx, services.ShipOrderInput{
-		ShopID:           sess.ShopID,
+		ShopID:           shopID,
 		OrderID:          orderID,
 		TrackingNumber:   r.FormValue("tracking_number"),
 		ShippingProvider: r.FormValue("shipping_provider"),
@@ -636,10 +569,10 @@ func (h *Handlers) AdminShipOrder(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, services.ErrAdminOrderStatusConflict):
 			http.Error(w, "Only paid or shipped orders can be updated", http.StatusConflict)
 		case errors.Is(err, services.ErrAdminShopNotFound):
-			h.loggerFromContext(ctx).Error("failed to get shop while shipping order", "error", err, "shop_id", sess.ShopID, "order_id", orderID)
+			h.loggerFromContext(ctx).Error("failed to get shop while shipping order", "error", err, "shop_id", shopID, "order_id", orderID)
 			http.Error(w, "Shop not found", http.StatusInternalServerError)
 		default:
-			h.loggerFromContext(ctx).Error("failed to ship order", "error", err, "order_id", orderID, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to ship order", "error", err, "order_id", orderID, "shop_id", shopID)
 			http.Error(w, "Failed to update order", http.StatusInternalServerError)
 		}
 		return

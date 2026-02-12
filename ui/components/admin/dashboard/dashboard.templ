@@ -26,6 +26,8 @@ type ProductSummary struct {
 }
 
 type RepoStatus struct {
+	StripeReady             bool
+	EmailConfigured         bool
 	YAMLExists               bool
 	YAMLValid                bool
 	YAMLURL                  string
@@ -56,7 +58,7 @@ templ StorefrontSection(status *RepoStatus) {
 	@card.Card() {
 		@card.Header() {
 			@card.Title() { Storefront Status }
-			@card.Description() { Repository health checks for GitShop ordering. }
+			@card.Description() { Operational and repository health checks for GitShop ordering. }
 		}
 		@card.Content() {
 			if status == nil {
@@ -74,7 +76,15 @@ func isStorefrontReady(status *RepoStatus) bool {
 	if status == nil {
 		return false
 	}
-	return status.YAMLExists && status.YAMLValid && status.TemplateExists && status.TemplateValid && len(status.TemplateExtraSKUs) == 0 && len(status.TemplatePriceMismatches) == 0 && len(status.TemplateOptionMismatches) == 0
+	return status.StripeReady &&
+		status.EmailConfigured &&
+		status.YAMLExists &&
+		status.YAMLValid &&
+		status.TemplateExists &&
+		status.TemplateValid &&
+		len(status.TemplateExtraSKUs) == 0 &&
+		len(status.TemplatePriceMismatches) == 0 &&
+		len(status.TemplateOptionMismatches) == 0
 }
 
 templ storefrontReady(status *RepoStatus) {
@@ -106,6 +116,7 @@ templ storefrontNeedsAttention(status *RepoStatus) {
 				<span>Storefront needs attention</span>
 			}
 			@accordion.Content() {
+				@operationalAlerts(status)
 				<div class="mt-1 grid gap-4 md:grid-cols-3">
 					@yamlCard(status, false)
 					@templateCard(status, false)
@@ -113,6 +124,33 @@ templ storefrontNeedsAttention(status *RepoStatus) {
 				</div>
 			}
 		}
+	}
+}
+
+templ operationalAlerts(status *RepoStatus) {
+	{{ needsStripe := !status.StripeReady }}
+	{{ needsEmail := !status.EmailConfigured }}
+	{{ needsAttention := needsStripe || needsEmail }}
+	if needsAttention {
+		<div class="mb-4 rounded-xl border border-border/60 bg-background p-4">
+			<div class="flex flex-wrap items-center gap-2">
+				@badge.Badge(badge.Props{Variant: badge.VariantDestructive}) { Action Required }
+				<p class="text-sm font-medium">Checkout is degraded until integrations are fixed.</p>
+			</div>
+			<div class="mt-3 space-y-1 text-sm text-muted-foreground">
+				if needsStripe && needsEmail {
+					<p>Stripe is not connected or is not ready for charges and payouts.</p>
+					<p>Email provider is not configured and verified for order notifications.</p>
+				} else if needsStripe {
+					<p>Stripe is not connected or is not ready for charges and payouts.</p>
+				} else if needsEmail {
+					<p>Email provider is not configured and verified for order notifications.</p>
+				}
+			</div>
+			<a class="mt-3 inline-flex text-sm font-medium text-primary hover:underline" href="/admin/settings">
+				Open settings
+			</a>
+		</div>
 	}
 }
 

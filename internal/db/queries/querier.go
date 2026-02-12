@@ -14,20 +14,21 @@ import (
 type Querier interface {
 	CountShopsByInstallationID(ctx context.Context, githubInstallationID int64) (int64, error)
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (CreateOrderRow, error)
-	CreateShop(ctx context.Context, arg CreateShopParams) (Shop, error)
+	CreateShop(ctx context.Context, arg CreateShopParams) (CreateShopRow, error)
 	DisconnectShop(ctx context.Context, arg DisconnectShopParams) error
-	GetConnectedShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]Shop, error)
+	GetConnectedShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]GetConnectedShopsByInstallationIDRow, error)
 	GetDistinctInstallationIDs(ctx context.Context) ([]int64, error)
-	GetFirstConfiguredShop(ctx context.Context, githubInstallationID int64) (Shop, error)
+	GetFirstConfiguredShop(ctx context.Context, githubInstallationID int64) (GetFirstConfiguredShopRow, error)
 	GetOrderByID(ctx context.Context, id uuid.UUID) (GetOrderByIDRow, error)
 	GetOrderByIssueNumber(ctx context.Context, arg GetOrderByIssueNumberParams) (GetOrderByIssueNumberRow, error)
 	GetOrderByStripeSessionID(ctx context.Context, stripeCheckoutSessionID pgtype.Text) (GetOrderByStripeSessionIDRow, error)
 	GetOrdersByShop(ctx context.Context, arg GetOrdersByShopParams) ([]GetOrdersByShopRow, error)
-	GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error)
-	GetShopByInstallationAndRepoID(ctx context.Context, arg GetShopByInstallationAndRepoIDParams) (Shop, error)
-	GetShopByInstallationID(ctx context.Context, githubInstallationID int64) (Shop, error)
-	GetShopByRepoID(ctx context.Context, githubRepoID int64) (Shop, error)
-	GetShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]Shop, error)
+	GetShopByID(ctx context.Context, id uuid.UUID) (GetShopByIDRow, error)
+	GetShopByInstallationAndRepoID(ctx context.Context, arg GetShopByInstallationAndRepoIDParams) (GetShopByInstallationAndRepoIDRow, error)
+	GetShopByInstallationID(ctx context.Context, githubInstallationID int64) (GetShopByInstallationIDRow, error)
+	GetShopByRepoID(ctx context.Context, githubRepoID int64) (GetShopByRepoIDRow, error)
+	GetShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]GetShopsByInstallationIDRow, error)
+	MarkShopOnboarded(ctx context.Context, id uuid.UUID) error
 	ReconnectShop(ctx context.Context, arg ReconnectShopParams) error
 	UpdateOrderDelivered(ctx context.Context, id uuid.UUID) error
 	UpdateOrderPaid(ctx context.Context, id uuid.UUID) error

@@ -45,7 +45,7 @@ func (s *ShopStore) GetByInstallationID(ctx context.Context, installationID int6
 		return nil, err
 	}
 
-	return s.convertShop(shop), nil
+	return s.convertShop(queries.GetShopByIDRow(shop)), nil
 }
 
 func (s *ShopStore) GetByRepoID(ctx context.Context, repoID int64) (*Shop, error) {
@@ -53,7 +53,7 @@ func (s *ShopStore) GetByRepoID(ctx context.Context, repoID int64) (*Shop, error
 	if err != nil {
 		return nil, err
 	}
-	return s.convertShop(shop), nil
+	return s.convertShop(queries.GetShopByIDRow(shop)), nil
 }
 
 func (s *ShopStore) GetByInstallationAndRepoID(ctx context.Context, installationID int64, repoID int64) (*Shop, error) {
@@ -64,7 +64,7 @@ func (s *ShopStore) GetByInstallationAndRepoID(ctx context.Context, installation
 	if err != nil {
 		return nil, err
 	}
-	return s.convertShop(shop), nil
+	return s.convertShop(queries.GetShopByIDRow(shop)), nil
 }
 
 func (s *ShopStore) GetShopsByInstallationID(ctx context.Context, installationID int64) ([]*Shop, error) {
@@ -75,13 +75,13 @@ func (s *ShopStore) GetShopsByInstallationID(ctx context.Context, installationID
 
 	shops := make([]*Shop, 0, len(rows))
 	for _, row := range rows {
-		shops = append(shops, s.convertShop(row))
+		shops = append(shops, s.convertShop(queries.GetShopByIDRow(row)))
 	}
 
 	return shops, nil
 }
 
-func (s *ShopStore) convertShop(row queries.Shop) *Shop {
+func (s *ShopStore) convertShop(row queries.GetShopByIDRow) *Shop {
 	shop := &Shop{
 		ID:                   row.ID,
 		GitHubInstallationID: row.GithubInstallationID,
@@ -90,15 +90,18 @@ func (s *ShopStore) convertShop(row queries.Shop) *Shop {
 		OwnerEmail:           row.OwnerEmail,
 		EmailProvider:        row.EmailProvider.String,
 		EmailVerified:        row.EmailVerified.Bool,
-		CreatedAt:            row.CreatedAt.Time.Format("2006-01-02"),
-		UpdatedAt:            row.UpdatedAt.Time.Format("2006-01-02"),
+		CreatedAt:            row.CreatedAt.Time.UTC(),
+		UpdatedAt:            row.UpdatedAt.Time.UTC(),
 	}
 
 	if row.StripeConnectAccountID.Valid {
 		shop.StripeConnectAccountID = row.StripeConnectAccountID.String
 	}
-	if row.DisconnectedAt.Valid && row.DisconnectedAt.Time.String() != "" {
-		shop.DisconnectedAt = row.DisconnectedAt.Time.Format("2006-01-02")
+	if row.DisconnectedAt.Valid {
+		shop.DisconnectedAt = row.DisconnectedAt.Time.UTC()
+	}
+	if row.OnboardedAt.Valid {
+		shop.OnboardedAt = row.OnboardedAt.Time.UTC()
 	}
 	if row.EmailConfig != nil {
 		config := s.decryptEmailConfig(row.EmailConfig)
@@ -160,7 +163,7 @@ func (s *ShopStore) Create(ctx context.Context, installationID int64, repoID int
 		return nil, err
 	}
 
-	return s.convertShop(shop), nil
+	return s.convertShop(queries.GetShopByIDRow(shop)), nil
 }
 
 func (s *ShopStore) UpdateRepoFullName(ctx context.Context, shopID uuid.UUID, repoFullName string) error {
@@ -204,6 +207,10 @@ func (s *ShopStore) UpdateStripeConnectDetails(ctx context.Context, shopID uuid.
 	})
 }
 
+func (s *ShopStore) MarkOnboarded(ctx context.Context, shopID uuid.UUID) error {
+	return s.queries.MarkShopOnboarded(ctx, shopID)
+}
+
 func (s *ShopStore) ReconnectShop(ctx context.Context, installationID int64, repoID int64) error {
 	return s.queries.ReconnectShop(ctx, queries.ReconnectShopParams{
 		GithubInstallationID: installationID,
@@ -240,7 +247,7 @@ func (s *ShopStore) GetConnectedShopsByInstallationID(ctx context.Context, insta
 
 	shops := make([]*Shop, 0, len(rows))
 	for _, row := range rows {
-		shops = append(shops, s.convertShop(row))
+		shops = append(shops, s.convertShop(queries.GetShopByIDRow(row)))
 	}
 
 	return shops, nil
@@ -265,7 +272,7 @@ func (s *ShopStore) GetFirstConfiguredShop(ctx context.Context, installationID i
 		return nil, err
 	}
 
-	return s.convertShop(shop), nil
+	return s.convertShop(queries.GetShopByIDRow(shop)), nil
 }
 
 type emailConfigData struct {

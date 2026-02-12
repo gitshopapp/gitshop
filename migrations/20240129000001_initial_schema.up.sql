@@ -11,6 +11,7 @@ CREATE TABLE shops (
     email_verified BOOLEAN DEFAULT FALSE,
     stripe_connect_account_id TEXT,
     disconnected_at TIMESTAMPTZ,
+    onboarded_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (github_installation_id, github_repo_id)

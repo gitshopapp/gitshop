@@ -60,6 +60,8 @@ type ProductSummary struct {
 }
 
 type RepoStatus struct {
+	StripeReady              bool
+	EmailConfigured          bool
 	YAMLExists               bool
 	YAMLValid                bool
 	YAMLURL                  string
@@ -122,7 +124,10 @@ func (s *AdminService) BuildRepoStatus(ctx context.Context, shop *db.Shop) *Repo
 		return nil
 	}
 
-	status := &RepoStatus{}
+	status := &RepoStatus{
+		StripeReady:     s.IsStripeReady(ctx, shop),
+		EmailConfigured: IsEmailConfigured(shop),
+	}
 	client := s.githubClient.WithInstallation(shop.GitHubInstallationID)
 
 	yamlFileStatus, yamlPath, err := s.getGitShopFileStatus(ctx, client, shop.GitHubRepoFullName)

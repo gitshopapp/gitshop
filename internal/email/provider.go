@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/gitshopapp/gitshop/internal/config"
 	"github.com/gitshopapp/gitshop/internal/db"
 )
 
@@ -42,19 +41,6 @@ func NewProvider(config Config) (Provider, error) {
 	}
 }
 
-func NewProviderFromConfig(cfg *config.Config) (Provider, error) {
-	switch cfg.EmailProvider {
-	case "postmark":
-		return NewPostmarkProvider(cfg.PostmarkAPIKey, cfg.EmailFrom), nil
-	case "mailgun":
-		return NewMailgunProviderWithBaseURL(cfg.MailgunAPIKey, cfg.MailgunDomain, cfg.EmailFrom, cfg.MailgunBaseURL), nil
-	case "resend":
-		return NewResendProvider(cfg.ResendAPIKey, cfg.EmailFrom), nil
-	default:
-		return nil, fmt.Errorf("EMAIL_PROVIDER must be either 'postmark', 'mailgun', or 'resend'")
-	}
-}
-
 func NewProviderFromShop(shop *db.Shop) (Provider, error) {
 	cfg, err := decodeShopEmailConfig(shop.EmailConfig)
 	if err != nil {
@@ -80,7 +66,6 @@ func NewProviderFromShop(shop *db.Shop) (Provider, error) {
 type shopEmailConfig struct {
 	APIKey    string `json:"api_key"`
 	FromEmail string `json:"from_email"`
-	From      string `json:"from"`
 	Domain    string `json:"domain"`
 	BaseURL   string `json:"base_url"`
 }
@@ -94,8 +79,6 @@ func decodeShopEmailConfig(config map[string]any) (shopEmailConfig, error) {
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		return decoded, fmt.Errorf("failed to decode shop email config: %w", err)
 	}
-	if decoded.FromEmail == "" {
-		decoded.FromEmail = decoded.From
-	}
+
 	return decoded, nil
 }

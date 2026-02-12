@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/gitshopapp/gitshop/internal/services"
 )
 
@@ -16,29 +14,32 @@ import (
 func (h *Handlers) StripeOnboardAccount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	sess, err := h.sessionManager.GetSession(ctx, r)
-	if err != nil || sess.ShopID == uuid.Nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:       "admin.stripe.onboard",
+		RequireShop: true,
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shopID := contextResult.Shop.ID
 
-	linkURL, err := h.stripeConnectService.StartOnboarding(ctx, sess.ShopID, h.config.BaseURL)
+	linkURL, err := h.stripeConnectService.StartOnboarding(ctx, shopID, h.config.BaseURL)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrStripeConnectUnavailable):
 			h.loggerFromContext(ctx).Error("stripe connect service is unavailable", "error", err)
 			http.Error(w, "Stripe integration unavailable", http.StatusServiceUnavailable)
 		case errors.Is(err, services.ErrStripeConnectCreateAccount):
-			h.loggerFromContext(ctx).Error("failed to create stripe account", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to create stripe account", "error", err, "shop_id", shopID)
 			http.Error(w, "Failed to create Stripe account", http.StatusInternalServerError)
 		case errors.Is(err, services.ErrStripeConnectCreateLink):
-			h.loggerFromContext(ctx).Error("failed to create stripe onboarding link", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to create stripe onboarding link", "error", err, "shop_id", shopID)
 			http.Error(w, "Failed to create onboarding link", http.StatusInternalServerError)
 		case errors.Is(err, services.ErrStripeConnectShopNotFound):
-			h.loggerFromContext(ctx).Error("failed to find shop for stripe onboarding", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to find shop for stripe onboarding", "error", err, "shop_id", shopID)
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 		default:
-			h.loggerFromContext(ctx).Error("failed to start stripe onboarding", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to start stripe onboarding", "error", err, "shop_id", shopID)
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 		}
 		return
@@ -100,22 +101,30 @@ func (h *Handlers) StripeOnboardCallback(w http.ResponseWriter, r *http.Request)
 func (h *Handlers) StripeConnectionStatusBadge(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	sess, err := h.sessionManager.GetSession(ctx, r)
-	if err != nil || sess.ShopID == uuid.Nil {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:       "admin.stripe.status.badge",
+		RequireShop: true,
+	})
+	if contextResult.Decision != AdminContextDecisionAllow {
+		if contextResult.Decision == AdminContextDecisionInternalError {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
+	shopID := contextResult.Shop.ID
 
-	status, err := h.stripeConnectService.GetConnectionStatus(ctx, sess.ShopID)
+	status, err := h.stripeConnectService.GetConnectionStatus(ctx, shopID)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrStripeConnectUnavailable):
 			w.WriteHeader(http.StatusServiceUnavailable)
 		case errors.Is(err, services.ErrStripeConnectShopNotFound):
-			h.loggerFromContext(ctx).Error("failed to get shop for stripe badge", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to get shop for stripe badge", "error", err, "shop_id", shopID)
 			w.WriteHeader(http.StatusInternalServerError)
 		default:
-			h.loggerFromContext(ctx).Error("failed to build stripe badge status", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to build stripe badge status", "error", err, "shop_id", shopID)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -127,7 +136,7 @@ func (h *Handlers) StripeConnectionStatusBadge(w http.ResponseWriter, r *http.Re
 			h.loggerFromContext(ctx).Warn("failed to write stripe badge", "error", err)
 		}
 	case "error":
-		h.loggerFromContext(ctx).Error("failed to verify stripe connection", "error", status.Error, "shop_id", sess.ShopID)
+		h.loggerFromContext(ctx).Error("failed to verify stripe connection", "error", status.Error, "shop_id", shopID)
 		if _, err := fmt.Fprint(w, `<div class="p-4 rounded-md bg-red-50 text-red-800">Failed to verify Stripe connection</div>`); err != nil {
 			h.loggerFromContext(ctx).Warn("failed to write stripe badge", "error", err)
 		}
@@ -150,22 +159,30 @@ func (h *Handlers) StripeConnectionStatusBadge(w http.ResponseWriter, r *http.Re
 func (h *Handlers) StripeConnectionStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	sess, err := h.sessionManager.GetSession(ctx, r)
-	if err != nil || sess.ShopID == uuid.Nil {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:       "admin.stripe.status",
+		RequireShop: true,
+	})
+	if contextResult.Decision != AdminContextDecisionAllow {
+		if contextResult.Decision == AdminContextDecisionInternalError {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	shopID := contextResult.Shop.ID
 
-	status, err := h.stripeConnectService.GetConnectionStatus(ctx, sess.ShopID)
+	status, err := h.stripeConnectService.GetConnectionStatus(ctx, shopID)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrStripeConnectUnavailable):
 			http.Error(w, "Stripe integration unavailable", http.StatusServiceUnavailable)
 		case errors.Is(err, services.ErrStripeConnectShopNotFound):
-			h.loggerFromContext(ctx).Error("failed to get shop for stripe connection status", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to get shop for stripe connection status", "error", err, "shop_id", shopID)
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 		default:
-			h.loggerFromContext(ctx).Error("failed to build stripe connection status", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to build stripe connection status", "error", err, "shop_id", shopID)
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 		}
 		return
@@ -196,13 +213,21 @@ func (h *Handlers) StripeConnectionStatus(w http.ResponseWriter, r *http.Request
 func (h *Handlers) StripeReconnectAccount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	sess, err := h.sessionManager.GetSession(ctx, r)
-	if err != nil || sess.ShopID == uuid.Nil {
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:       "admin.stripe.reconnect",
+		RequireShop: true,
+	})
+	if contextResult.Decision != AdminContextDecisionAllow {
+		if contextResult.Decision == AdminContextDecisionInternalError {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	shopID := contextResult.Shop.ID
 
-	linkURL, err := h.stripeConnectService.ReconnectOnboarding(ctx, sess.ShopID, h.config.BaseURL)
+	linkURL, err := h.stripeConnectService.ReconnectOnboarding(ctx, shopID, h.config.BaseURL)
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrStripeConnectUnavailable):
@@ -210,10 +235,10 @@ func (h *Handlers) StripeReconnectAccount(w http.ResponseWriter, r *http.Request
 		case errors.Is(err, services.ErrStripeConnectNoAccount), errors.Is(err, services.ErrStripeConnectShopNotFound):
 			http.Error(w, "No Stripe account found", http.StatusNotFound)
 		case errors.Is(err, services.ErrStripeConnectCreateLink):
-			h.loggerFromContext(ctx).Error("failed to create stripe reconnection link", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to create stripe reconnection link", "error", err, "shop_id", shopID)
 			http.Error(w, "Failed to create reconnection link", http.StatusInternalServerError)
 		default:
-			h.loggerFromContext(ctx).Error("failed to reconnect stripe account", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to reconnect stripe account", "error", err, "shop_id", shopID)
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 		}
 		return
@@ -226,20 +251,23 @@ func (h *Handlers) StripeReconnectAccount(w http.ResponseWriter, r *http.Request
 func (h *Handlers) StripeDisconnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	sess, err := h.sessionManager.GetSession(ctx, r)
-	if err != nil || sess.ShopID == uuid.Nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(ctx, r, AdminContextRequirements{
+		Route:       "admin.stripe.disconnect",
+		RequireShop: true,
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
+	shopID := contextResult.Shop.ID
 
-	if err := h.stripeConnectService.Disconnect(ctx, sess.ShopID); err != nil {
+	if err := h.stripeConnectService.Disconnect(ctx, shopID); err != nil {
 		if errors.Is(err, services.ErrStripeConnectShopNotFound) {
-			h.loggerFromContext(ctx).Error("failed to get shop for stripe disconnect", "error", err, "shop_id", sess.ShopID)
+			h.loggerFromContext(ctx).Error("failed to get shop for stripe disconnect", "error", err, "shop_id", shopID)
 			http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
 			return
 		}
 
-		h.loggerFromContext(ctx).Error("failed to disconnect stripe account", "error", err, "shop_id", sess.ShopID)
+		h.loggerFromContext(ctx).Error("failed to disconnect stripe account", "error", err, "shop_id", shopID)
 	}
 
 	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)

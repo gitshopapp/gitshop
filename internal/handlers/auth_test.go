@@ -70,7 +70,7 @@ func TestGitHubCallback_MissingStateCookie_InstallationStartRedirectsToLoginFlow
 	}
 }
 
-func TestGitHubCallback_MissingStateCookie_WithOAuthPayloadRedirectsToAdminLogin(t *testing.T) {
+func TestGitHubCallback_MissingStateCookie_WithOAuthPayloadRestartsLoginFlow(t *testing.T) {
 	t.Parallel()
 
 	h := &Handlers{
@@ -78,6 +78,27 @@ func TestGitHubCallback_MissingStateCookie_WithOAuthPayloadRedirectsToAdminLogin
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/github/callback?installation_id=12345&code=test-code&state=test-state", nil)
+	rec := httptest.NewRecorder()
+
+	h.GitHubCallback(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/auth/github/login?installation_id=12345" {
+		t.Fatalf("unexpected redirect location: got=%q", location)
+	}
+}
+
+func TestGitHubCallback_MissingStateCookie_WithoutInstallationIDRedirectsToAdminLogin(t *testing.T) {
+	t.Parallel()
+
+	h := &Handlers{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/callback?code=test-code&state=test-state", nil)
 	rec := httptest.NewRecorder()
 
 	h.GitHubCallback(rec, req)
@@ -107,6 +128,46 @@ func TestAdminLogin_AuthenticatedWithoutInstallationID_RedirectsToDashboard(t *t
 		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
 	}
 	if location := resp.Header.Get("Location"); location != "/admin/dashboard" {
+		t.Fatalf("unexpected redirect location: got=%q", location)
+	}
+}
+
+func TestAdminLogin_AuthenticatedWithoutInstallationContext_RedirectsToGitHubLogin(t *testing.T) {
+	t.Parallel()
+
+	h, cookie := newAuthenticatedHandlerAndCookie(t, 0)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+
+	h.AdminLogin(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/auth/github/login" {
+		t.Fatalf("unexpected redirect location: got=%q", location)
+	}
+}
+
+func TestAdminLogin_AuthenticatedWithNoInstallations_RedirectsToNoInstallationsPage(t *testing.T) {
+	t.Parallel()
+
+	h, cookie := newAuthenticatedHandlerAndCookie(t, noInstallationSessionInstallationID)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/login", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+
+	h.AdminLogin(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/admin/no-installations" {
 		t.Fatalf("unexpected redirect location: got=%q", location)
 	}
 }
@@ -146,6 +207,64 @@ func TestAdminLogin_InvalidInstallationID_ReturnsBadRequest(t *testing.T) {
 	resp := rec.Result()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestNoInstallation_NoSessionRedirectsToLogin(t *testing.T) {
+	t.Parallel()
+
+	h := &Handlers{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/no-installations", nil)
+	rec := httptest.NewRecorder()
+
+	h.NoInstallation(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/admin/login" {
+		t.Fatalf("unexpected redirect location: got=%q want=%q", location, "/admin/login")
+	}
+}
+
+func TestNoInstallation_WithNoInstallationsSessionRendersPage(t *testing.T) {
+	t.Parallel()
+
+	h, cookie := newAuthenticatedHandlerAndCookie(t, noInstallationSessionInstallationID)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/no-installations", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+
+	h.NoInstallation(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestNoInstallation_WithActiveInstallationRedirectsToAdmin(t *testing.T) {
+	t.Parallel()
+
+	h, cookie := newAuthenticatedHandlerAndCookie(t, 111)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/no-installations", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+
+	h.NoInstallation(rec, req)
+
+	resp := rec.Result()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got=%d want=%d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if location := resp.Header.Get("Location"); location != "/admin" {
+		t.Fatalf("unexpected redirect location: got=%q want=%q", location, "/admin")
 	}
 }
 

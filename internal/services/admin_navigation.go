@@ -58,6 +58,24 @@ func (s *AdminService) IsOnboardingComplete(ctx context.Context, shop *db.Shop) 
 		status.Template.Exists
 }
 
+func (s *AdminService) IsOnboarded(shop *db.Shop) bool {
+	return shop != nil && shop.IsOnboarded()
+}
+
+func (s *AdminService) MarkOnboarded(ctx context.Context, shop *db.Shop) error {
+	if s == nil || s.shopStore == nil {
+		return fmt.Errorf("%w: shop store unavailable", ErrAdminServiceUnavailable)
+	}
+	if shop == nil {
+		return fmt.Errorf("%w: shop is required", ErrAdminShopNotFound)
+	}
+	if shop.ID == uuid.Nil {
+		return fmt.Errorf("%w: empty shop id", ErrAdminShopNotFound)
+	}
+
+	return s.shopStore.MarkOnboarded(ctx, shop.ID)
+}
+
 func (s *AdminService) GetInstallationShops(ctx context.Context, installationID int64) ([]*db.Shop, error) {
 	if s == nil || s.shopStore == nil {
 		return nil, fmt.Errorf("%w: shop store unavailable", ErrAdminServiceUnavailable)

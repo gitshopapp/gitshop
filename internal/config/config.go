@@ -13,6 +13,7 @@ import (
 type Config struct {
 	DatabaseURL            string `env:"DATABASE_URL,required" validate:"required"`
 	GitHubAppID            string `env:"GITHUB_APP_ID,required" validate:"required"`
+	GitHubAppURL           string `env:"GITHUB_APP_URL" envDefault:"https://github.com/apps/gitshopapp" validate:"required,url"`
 	GitHubWebhookSecret    string `env:"GITHUB_WEBHOOK_SECRET,required" validate:"required"`
 	GitHubPrivateKeyBase64 string `env:"GITHUB_PRIVATE_KEY_BASE64,required" validate:"required"`
 
@@ -30,16 +31,6 @@ type Config struct {
 	RedisConnectionString string `env:"REDIS_CONNECTION_STRING" envDefault:"redis://localhost:6379/0" validate:"required_if=CacheProvider redis,required_if=SessionStoreProvider redis"`
 
 	EncryptionKey string `env:"ENCRYPTION_KEY,required" validate:"required,len=32"`
-
-	EmailProvider string `env:"EMAIL_PROVIDER" validate:"omitempty,oneof=postmark mailgun resend"`
-	EmailFrom     string `env:"EMAIL_FROM" validate:"required_if=EmailProvider mailgun,required_if=EmailProvider postmark,required_if=EmailProvider resend"`
-
-	MailgunAPIKey  string `env:"MAILGUN_API_KEY" validate:"required_if=EmailProvider mailgun"`
-	MailgunDomain  string `env:"MAILGUN_DOMAIN" validate:"required_if=EmailProvider mailgun"`
-	MailgunBaseURL string `env:"MAILGUN_BASE_URL" envDefault:"https://api.mailgun.net/v3"`
-
-	PostmarkAPIKey string `env:"POSTMARK_API_KEY" validate:"required_if=EmailProvider postmark"`
-	ResendAPIKey   string `env:"RESEND_API_KEY" validate:"required_if=EmailProvider resend"`
 
 	LogLevel  slog.Level `env:"LOG_LEVEL" envDefault:"INFO"`
 	LogFormat string     `env:"LOG_FORMAT" envDefault:"text" validate:"omitempty,oneof=text json"`

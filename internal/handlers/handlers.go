@@ -151,15 +151,10 @@ func (h *Handlers) RequireAuth(next http.Handler) http.Handler {
 }
 
 func (h *Handlers) Root(w http.ResponseWriter, r *http.Request) {
-	session, err := h.sessionManager.GetSession(r.Context(), r)
-	if err != nil || session == nil {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
-		return
-	}
-
-	if session.InstallationID == 0 {
-		h.loggerFromContext(r.Context()).Info("installation id in session is 0", "route", "root", "username", session.GitHubUsername)
-		http.Redirect(w, r, "/auth/github/login", http.StatusSeeOther)
+	contextResult := h.ResolveAdminContext(r.Context(), r, AdminContextRequirements{
+		Route: "root",
+	})
+	if h.WriteAdminContextDecision(w, r, contextResult) {
 		return
 	}
 

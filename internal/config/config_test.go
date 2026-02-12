@@ -139,6 +139,7 @@ func validConfig() *Config {
 	return &Config{
 		DatabaseURL:            "postgres://user:pass@localhost:5432/gitshop",
 		GitHubAppID:            "12345",
+		GitHubAppURL:           "https://github.com/apps/gitshopapp",
 		GitHubWebhookSecret:    "secret",
 		GitHubPrivateKeyBase64: "base64pem",
 		StripeWebhookSecret:    "whsec_123",
@@ -170,5 +171,8 @@ func TestLoadParsesUppercaseLogLevel(t *testing.T) {
 	}
 	if cfg.LogLevel != slog.LevelInfo {
 		t.Fatalf("expected INFO level, got %v", cfg.LogLevel)
+	}
+	if cfg.GitHubAppURL != "https://github.com/apps/gitshopapp" {
+		t.Fatalf("expected default GitHub app URL, got %q", cfg.GitHubAppURL)
 	}
 }

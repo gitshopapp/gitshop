@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -15,6 +16,35 @@ func TestAdminService_IsOnboardingComplete_NilShop(t *testing.T) {
 	service := &AdminService{}
 	if service.IsOnboardingComplete(t.Context(), nil) {
 		t.Fatal("expected onboarding to be incomplete for nil shop")
+	}
+}
+
+func TestAdminService_IsOnboarded(t *testing.T) {
+	t.Parallel()
+
+	service := &AdminService{}
+	if service.IsOnboarded(nil) {
+		t.Fatal("expected nil shop to be not onboarded")
+	}
+
+	shop := &db.Shop{}
+	if service.IsOnboarded(shop) {
+		t.Fatal("expected shop without onboarded_at to be not onboarded")
+	}
+
+	shop.OnboardedAt = time.Now().UTC()
+	if !service.IsOnboarded(shop) {
+		t.Fatal("expected shop with onboarded_at to be onboarded")
+	}
+}
+
+func TestAdminService_MarkOnboarded_ServiceUnavailable(t *testing.T) {
+	t.Parallel()
+
+	service := &AdminService{}
+	err := service.MarkOnboarded(t.Context(), &db.Shop{ID: uuid.New()})
+	if !errors.Is(err, ErrAdminServiceUnavailable) {
+		t.Fatalf("expected ErrAdminServiceUnavailable, got %v", err)
 	}
 }
 

@@ -214,40 +214,55 @@ func (s *AuthService) getGitHubUser(ctx context.Context, accessToken string) (*G
 }
 
 func (s *AuthService) getUserInstallations(ctx context.Context, accessToken string) ([]GitHubInstallation, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user/installations", nil)
-	if err != nil {
-		return nil, err
-	}
+	const perPage = 100
+	installations := make([]GitHubInstallation, 0, perPage)
 
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	for page := 1; ; page++ {
+		endpoint := fmt.Sprintf("https://api.github.com/user/installations?per_page=%d&page=%d", perPage, page)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, readErr := io.ReadAll(resp.Body)
+			if closeErr := resp.Body.Close(); closeErr != nil && s.logger != nil {
+				s.logger.Warn("failed to close github installations response body", "error", closeErr)
+			}
+			if readErr != nil {
+				return nil, fmt.Errorf("github API returned status %d (failed to read response body: %w)", resp.StatusCode, readErr)
+			}
+			return nil, fmt.Errorf("github API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var payload struct {
+			Installations []GitHubInstallation `json:"installations"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			if closeErr := resp.Body.Close(); closeErr != nil && s.logger != nil {
+				s.logger.Warn("failed to close github installations response body", "error", closeErr)
+			}
+			return nil, err
+		}
 		if closeErr := resp.Body.Close(); closeErr != nil && s.logger != nil {
 			s.logger.Warn("failed to close github installations response body", "error", closeErr)
 		}
-	}()
 
-	if resp.StatusCode != http.StatusOK {
-		body, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return nil, fmt.Errorf("github API returned status %d (failed to read response body: %w)", resp.StatusCode, readErr)
+		installations = append(installations, payload.Installations...)
+		if len(payload.Installations) < perPage {
+			break
 		}
-		return nil, fmt.Errorf("github API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var payload struct {
-		Installations []GitHubInstallation `json:"installations"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
-	}
-
-	return payload.Installations, nil
+	return installations, nil
 }
 
 func (s *AuthService) resolveAuthorizedInstallationID(ctx context.Context, accessToken string, preferredIDs []int64) (int64, error) {

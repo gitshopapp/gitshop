@@ -81,12 +81,9 @@ func (h *Handlers) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	stateCookie, err := r.Cookie("oauth_state")
 	if err != nil {
-		state := strings.TrimSpace(r.URL.Query().Get("state"))
-		code := strings.TrimSpace(r.URL.Query().Get("code"))
-
-		if installationIDFromQuery > 0 && state == "" && code == "" {
-			logger.Info("oauth callback from installation flow; restarting oauth", "installation_id", installationIDFromQuery)
-			http.Redirect(w, r, fmt.Sprintf("/auth/github/login?installation_id=%d", installationIDFromQuery), http.StatusSeeOther)
+		if installationIDFromQuery > 0 {
+			logger.Info("oauth state cookie not found; restarting oauth", "installation_id", installationIDFromQuery)
+			http.Redirect(w, r, oauthLoginRedirectURL(installationIDFromQuery), http.StatusSeeOther)
 			return
 		}
 
@@ -168,18 +165,41 @@ func (h *Handlers) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	if oauthResult.ResolutionError != nil {
 		logger.Warn("failed to resolve authorized installation for session", "error", oauthResult.ResolutionError)
+		http.Error(w, "Failed to verify GitHub installations", http.StatusBadGateway)
+		return
 	}
 
 	installationID := oauthResult.InstallationID
 	shops := oauthResult.Shops
 	shopID := oauthResult.ShopID
 
-	if installationID > 0 {
-		if len(shops) == 1 {
-			logger.Info("found single shop for installation", "installation_id", installationID, "shop_id", shopID)
-		} else if len(shops) > 1 {
-			logger.Info("found multiple shops for installation", "installation_id", installationID, "count", len(shops))
+	if installationID <= 0 {
+		if h.sessionManager == nil {
+			logger.Error("session manager is unavailable for no-installation oauth callback")
+			http.Error(w, "Failed to create session", http.StatusInternalServerError)
+			return
 		}
+
+		sessionData := &session.Data{
+			UserID:         int64(oauthResult.User.ID),
+			GitHubUsername: oauthResult.User.Login,
+			InstallationID: noInstallationSessionInstallationID,
+		}
+		if _, err := h.sessionManager.CreateSession(ctx, w, sessionData); err != nil {
+			logger.Error("failed to create no-installation session", "error", err, "username", oauthResult.User.Login)
+			http.Error(w, "Failed to create session", http.StatusInternalServerError)
+			return
+		}
+
+		logger.Info("session created without installations", "username", oauthResult.User.Login)
+		http.Redirect(w, r, "/admin/no-installations", http.StatusSeeOther)
+		return
+	}
+
+	if len(shops) == 1 {
+		logger.Info("found single shop for installation", "installation_id", installationID, "shop_id", shopID)
+	} else if len(shops) > 1 {
+		logger.Info("found multiple shops for installation", "installation_id", installationID, "count", len(shops))
 	}
 
 	sessionData := &session.Data{
@@ -198,23 +218,19 @@ func (h *Handlers) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("session created successfully", "username", oauthResult.User.Login, "installation_id", installationID, "shop_id", shopID)
 
-	if installationID > 0 {
-		switch len(shops) {
-		case 0:
-			http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
-		case 1:
-			if h.adminService.IsOnboardingComplete(ctx, shops[0]) {
-				http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
-				return
-			}
-			http.Redirect(w, r, fmt.Sprintf("/admin/setup?shop_id=%s", shops[0].ID.String()), http.StatusSeeOther)
-		default:
-			http.Redirect(w, r, "/admin/shops", http.StatusSeeOther)
+	switch len(shops) {
+	case 0:
+		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+	case 1:
+		if h.adminService.IsOnboardingComplete(ctx, shops[0]) {
+			http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+			return
 		}
-		return
+		http.Redirect(w, r, fmt.Sprintf("/admin/setup?shop_id=%s", shops[0].ID.String()), http.StatusSeeOther)
+	default:
+		http.Redirect(w, r, "/admin/shops", http.StatusSeeOther)
 	}
 
-	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }
 
 // Logout destroys the session and redirects to login.
@@ -239,10 +255,16 @@ func (h *Handlers) AdminLogin(w http.ResponseWriter, r *http.Request) {
 		requestedInstallationID = parsedInstallationID
 	}
 
-	_, err := h.sessionManager.GetSession(r.Context(), r)
-	if err == nil {
+	contextResult := h.ResolveAdminContext(r.Context(), r, AdminContextRequirements{
+		Route:          "admin.login",
+		AllowAnonymous: true,
+	})
+	if contextResult.Session != nil {
 		if requestedInstallationID > 0 {
-			http.Redirect(w, r, fmt.Sprintf("/auth/github/login?installation_id=%d", requestedInstallationID), http.StatusSeeOther)
+			http.Redirect(w, r, oauthLoginRedirectURL(requestedInstallationID), http.StatusSeeOther)
+			return
+		}
+		if h.WriteAdminContextDecision(w, r, contextResult) {
 			return
 		}
 		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
@@ -258,21 +280,39 @@ func (h *Handlers) AdminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handlers) NoInstallation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logger := h.loggerFromContext(ctx)
+
+	sess := session.GetSessionFromContext(ctx)
+	if sess == nil && h.sessionManager != nil {
+		loaded, err := h.sessionManager.GetSession(ctx, r)
+		if err == nil {
+			sess = loaded
+		}
+	}
+
+	if sess == nil {
+		h.htmxRedirect(w, r, "/admin/login")
+		return
+	}
+	if sess.InstallationID != noInstallationSessionInstallationID {
+		h.htmxRedirect(w, r, "/admin")
+		return
+	}
+
+	gitHubAppURL := ""
+	if h.config != nil {
+		gitHubAppURL = h.config.GitHubAppURL
+	}
+
+	if err := views.NoInstallationPage(gitHubAppURL).Render(ctx, w); err != nil {
+		logger.Error("failed to render no installation page", "error", err)
+		http.Error(w, "No GitHub App installation found", http.StatusNotFound)
+	}
+}
+
 // isSecure returns true if we should use secure cookies.
 func (h *Handlers) isSecure() bool {
 	return secureCookiesFromConfig(h.config)
-}
-
-func parseInstallationID(value string) (int64, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0, fmt.Errorf("installation_id is empty")
-	}
-
-	installationID, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || installationID <= 0 {
-		return 0, fmt.Errorf("invalid installation_id: %s", value)
-	}
-
-	return installationID, nil
 }

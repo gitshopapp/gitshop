@@ -73,11 +73,20 @@ func (h *Handlers) RequestLogger(next http.Handler) http.Handler {
 			status = http.StatusOK
 		}
 
-		logger.Info("request completed",
-			"status", status,
-			"duration_ms", time.Since(start).Milliseconds(),
-			"bytes", wrapped.bytes,
-		)
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			// log asset requests as debug
+			logger.Debug("asset request completed",
+				"status", status,
+				"duration_ms", time.Since(start).Milliseconds(),
+				"bytes", wrapped.bytes,
+			)
+		} else {
+			logger.Info("request completed",
+				"status", status,
+				"duration_ms", time.Since(start).Milliseconds(),
+				"bytes", wrapped.bytes,
+			)
+		}
 	})
 }
 

@@ -28,7 +28,7 @@ INSERT INTO shops (github_installation_id, github_repo_id, github_repo_full_name
 VALUES ($1, $2, $3, $4)
 RETURNING id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
           email_provider, email_config, email_verified,
-          stripe_connect_account_id, disconnected_at, created_at, updated_at
+          stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 `
 
 type CreateShopParams struct {
@@ -38,14 +38,30 @@ type CreateShopParams struct {
 	OwnerEmail           string `json:"owner_email"`
 }
 
-func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, error) {
+type CreateShopRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (CreateShopRow, error) {
 	row := q.db.QueryRow(ctx, createShop,
 		arg.GithubInstallationID,
 		arg.GithubRepoID,
 		arg.GithubRepoFullName,
 		arg.OwnerEmail,
 	)
-	var i Shop
+	var i CreateShopRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubInstallationID,
@@ -59,6 +75,7 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardedAt,
 	)
 	return i, err
 }
@@ -86,21 +103,37 @@ func (q *Queries) DisconnectShop(ctx context.Context, arg DisconnectShopParams) 
 const getConnectedShopsByInstallationID = `-- name: GetConnectedShopsByInstallationID :many
 SELECT id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
        email_provider, email_config, email_verified,
-       stripe_connect_account_id, disconnected_at, created_at, updated_at
+       stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 FROM shops
 WHERE github_installation_id = $1 AND disconnected_at IS NULL
 ORDER BY github_repo_full_name
 `
 
-func (q *Queries) GetConnectedShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]Shop, error) {
+type GetConnectedShopsByInstallationIDRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) GetConnectedShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]GetConnectedShopsByInstallationIDRow, error) {
 	rows, err := q.db.Query(ctx, getConnectedShopsByInstallationID, githubInstallationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Shop
+	var items []GetConnectedShopsByInstallationIDRow
 	for rows.Next() {
-		var i Shop
+		var i GetConnectedShopsByInstallationIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.GithubInstallationID,
@@ -114,6 +147,7 @@ func (q *Queries) GetConnectedShopsByInstallationID(ctx context.Context, githubI
 			&i.DisconnectedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OnboardedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -152,7 +186,7 @@ func (q *Queries) GetDistinctInstallationIDs(ctx context.Context) ([]int64, erro
 const getFirstConfiguredShop = `-- name: GetFirstConfiguredShop :one
 SELECT id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
        email_provider, email_config, email_verified,
-       stripe_connect_account_id, disconnected_at, created_at, updated_at
+       stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 FROM shops
 WHERE github_installation_id = $1
   AND stripe_connect_account_id IS NOT NULL
@@ -160,9 +194,25 @@ WHERE github_installation_id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetFirstConfiguredShop(ctx context.Context, githubInstallationID int64) (Shop, error) {
+type GetFirstConfiguredShopRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) GetFirstConfiguredShop(ctx context.Context, githubInstallationID int64) (GetFirstConfiguredShopRow, error) {
 	row := q.db.QueryRow(ctx, getFirstConfiguredShop, githubInstallationID)
-	var i Shop
+	var i GetFirstConfiguredShopRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubInstallationID,
@@ -176,6 +226,7 @@ func (q *Queries) GetFirstConfiguredShop(ctx context.Context, githubInstallation
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardedAt,
 	)
 	return i, err
 }
@@ -183,14 +234,30 @@ func (q *Queries) GetFirstConfiguredShop(ctx context.Context, githubInstallation
 const getShopByID = `-- name: GetShopByID :one
 SELECT id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
        email_provider, email_config, email_verified,
-       stripe_connect_account_id, disconnected_at, created_at, updated_at
+       stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 FROM shops
 WHERE id = $1
 `
 
-func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
+type GetShopByIDRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (GetShopByIDRow, error) {
 	row := q.db.QueryRow(ctx, getShopByID, id)
-	var i Shop
+	var i GetShopByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubInstallationID,
@@ -204,6 +271,7 @@ func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardedAt,
 	)
 	return i, err
 }
@@ -211,7 +279,7 @@ func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
 const getShopByInstallationAndRepoID = `-- name: GetShopByInstallationAndRepoID :one
 SELECT id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
        email_provider, email_config, email_verified,
-       stripe_connect_account_id, disconnected_at, created_at, updated_at
+       stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 FROM shops
 WHERE github_installation_id = $1 AND github_repo_id = $2
 `
@@ -221,9 +289,25 @@ type GetShopByInstallationAndRepoIDParams struct {
 	GithubRepoID         int64 `json:"github_repo_id"`
 }
 
-func (q *Queries) GetShopByInstallationAndRepoID(ctx context.Context, arg GetShopByInstallationAndRepoIDParams) (Shop, error) {
+type GetShopByInstallationAndRepoIDRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) GetShopByInstallationAndRepoID(ctx context.Context, arg GetShopByInstallationAndRepoIDParams) (GetShopByInstallationAndRepoIDRow, error) {
 	row := q.db.QueryRow(ctx, getShopByInstallationAndRepoID, arg.GithubInstallationID, arg.GithubRepoID)
-	var i Shop
+	var i GetShopByInstallationAndRepoIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubInstallationID,
@@ -237,6 +321,7 @@ func (q *Queries) GetShopByInstallationAndRepoID(ctx context.Context, arg GetSho
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardedAt,
 	)
 	return i, err
 }
@@ -244,14 +329,30 @@ func (q *Queries) GetShopByInstallationAndRepoID(ctx context.Context, arg GetSho
 const getShopByInstallationID = `-- name: GetShopByInstallationID :one
 SELECT id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
        email_provider, email_config, email_verified,
-       stripe_connect_account_id, disconnected_at, created_at, updated_at
+       stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 FROM shops
 WHERE github_installation_id = $1
 `
 
-func (q *Queries) GetShopByInstallationID(ctx context.Context, githubInstallationID int64) (Shop, error) {
+type GetShopByInstallationIDRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) GetShopByInstallationID(ctx context.Context, githubInstallationID int64) (GetShopByInstallationIDRow, error) {
 	row := q.db.QueryRow(ctx, getShopByInstallationID, githubInstallationID)
-	var i Shop
+	var i GetShopByInstallationIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubInstallationID,
@@ -265,6 +366,7 @@ func (q *Queries) GetShopByInstallationID(ctx context.Context, githubInstallatio
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardedAt,
 	)
 	return i, err
 }
@@ -272,14 +374,30 @@ func (q *Queries) GetShopByInstallationID(ctx context.Context, githubInstallatio
 const getShopByRepoID = `-- name: GetShopByRepoID :one
 SELECT id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
        email_provider, email_config, email_verified,
-       stripe_connect_account_id, disconnected_at, created_at, updated_at
+       stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 FROM shops
 WHERE github_repo_id = $1
 `
 
-func (q *Queries) GetShopByRepoID(ctx context.Context, githubRepoID int64) (Shop, error) {
+type GetShopByRepoIDRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) GetShopByRepoID(ctx context.Context, githubRepoID int64) (GetShopByRepoIDRow, error) {
 	row := q.db.QueryRow(ctx, getShopByRepoID, githubRepoID)
-	var i Shop
+	var i GetShopByRepoIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubInstallationID,
@@ -293,6 +411,7 @@ func (q *Queries) GetShopByRepoID(ctx context.Context, githubRepoID int64) (Shop
 		&i.DisconnectedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OnboardedAt,
 	)
 	return i, err
 }
@@ -300,21 +419,37 @@ func (q *Queries) GetShopByRepoID(ctx context.Context, githubRepoID int64) (Shop
 const getShopsByInstallationID = `-- name: GetShopsByInstallationID :many
 SELECT id, github_installation_id, github_repo_id, github_repo_full_name, owner_email,
        email_provider, email_config, email_verified,
-       stripe_connect_account_id, disconnected_at, created_at, updated_at
+       stripe_connect_account_id, disconnected_at, created_at, updated_at, onboarded_at
 FROM shops
 WHERE github_installation_id = $1
 ORDER BY github_repo_full_name
 `
 
-func (q *Queries) GetShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]Shop, error) {
+type GetShopsByInstallationIDRow struct {
+	ID                     uuid.UUID          `json:"id"`
+	GithubInstallationID   int64              `json:"github_installation_id"`
+	GithubRepoID           int64              `json:"github_repo_id"`
+	GithubRepoFullName     string             `json:"github_repo_full_name"`
+	OwnerEmail             string             `json:"owner_email"`
+	EmailProvider          pgtype.Text        `json:"email_provider"`
+	EmailConfig            []byte             `json:"email_config"`
+	EmailVerified          pgtype.Bool        `json:"email_verified"`
+	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
+	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
+}
+
+func (q *Queries) GetShopsByInstallationID(ctx context.Context, githubInstallationID int64) ([]GetShopsByInstallationIDRow, error) {
 	rows, err := q.db.Query(ctx, getShopsByInstallationID, githubInstallationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Shop
+	var items []GetShopsByInstallationIDRow
 	for rows.Next() {
-		var i Shop
+		var i GetShopsByInstallationIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.GithubInstallationID,
@@ -328,6 +463,7 @@ func (q *Queries) GetShopsByInstallationID(ctx context.Context, githubInstallati
 			&i.DisconnectedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OnboardedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -337,6 +473,18 @@ func (q *Queries) GetShopsByInstallationID(ctx context.Context, githubInstallati
 		return nil, err
 	}
 	return items, nil
+}
+
+const markShopOnboarded = `-- name: MarkShopOnboarded :exec
+UPDATE shops
+SET onboarded_at = COALESCE(onboarded_at, NOW()),
+    updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) MarkShopOnboarded(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markShopOnboarded, id)
+	return err
 }
 
 const reconnectShop = `-- name: ReconnectShop :exec

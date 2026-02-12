@@ -51,6 +51,7 @@ type Shop struct {
 	EmailVerified          pgtype.Bool        `json:"email_verified"`
 	StripeConnectAccountID pgtype.Text        `json:"stripe_connect_account_id"`
 	DisconnectedAt         pgtype.Timestamptz `json:"disconnected_at"`
+	OnboardedAt            pgtype.Timestamptz `json:"onboarded_at"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
