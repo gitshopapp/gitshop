@@ -32,9 +32,15 @@ type Config struct {
 
 	EncryptionKey string `env:"ENCRYPTION_KEY,required" validate:"required,len=32"`
 
-	LogLevel  slog.Level `env:"LOG_LEVEL" envDefault:"INFO"`
-	LogFormat string     `env:"LOG_FORMAT" envDefault:"text" validate:"omitempty,oneof=text json"`
-	Port      string     `env:"PORT" envDefault:"8080"`
+	LogLevel    slog.Level `env:"LOG_LEVEL" envDefault:"INFO"`
+	LogFormat   string     `env:"LOG_FORMAT" envDefault:"text" validate:"omitempty,oneof=text json"`
+	Port        string     `env:"PORT" envDefault:"8080"`
+	Environment string     `env:"ENVIRONMENT" envDefault:"development" validate:"oneof=development production"`
+
+	SentryDSN              string  `env:"SENTRY_DSN"`
+	SentryTracesSampleRate float64 `env:"SENTRY_TRACES_SAMPLE_RATE" envDefault:"0.2" validate:"gte=0,lte=1"`
+	SentryRelease          string  `env:"SENTRY_RELEASE"`
+	RenderGitCommit        string  `env:"RENDER_GIT_COMMIT"`
 }
 
 var configValidator = validator.New()

@@ -4,9 +4,12 @@ package stripe
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stripe/stripe-go/v84"
+
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 // PlatformClient handles Stripe Connect platform operations
@@ -18,8 +21,11 @@ type PlatformClient struct {
 
 // NewPlatformClient creates a new Stripe Connect client
 func NewPlatformClient(secretKey, clientID, baseURL string) *PlatformClient {
+	httpClient := observability.NewHTTPClient(20 * time.Second)
+	backends := stripe.NewBackends(httpClient)
+
 	return &PlatformClient{
-		client:   stripe.NewClient(secretKey),
+		client:   stripe.NewClient(secretKey, stripe.WithBackends(backends)),
 		clientID: clientID,
 		baseURL:  baseURL,
 	}

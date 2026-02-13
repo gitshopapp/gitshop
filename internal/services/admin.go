@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/uuid"
 
 	"github.com/gitshopapp/gitshop/internal/catalog"
@@ -297,9 +299,27 @@ func (s *AdminService) SyncOrderTemplates(ctx context.Context, shop *db.Shop) (s
 }
 
 func (s *AdminService) ShipOrder(ctx context.Context, input ShipOrderInput) error {
+	span := sentry.StartSpan(
+		ctx,
+		"service.admin.ship_order",
+		sentry.WithOpName("service.admin"),
+		sentry.WithDescription("ShipOrder"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
 	logger := s.loggerFromContext(ctx)
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter.Count("fulfillment.shipment.received", 1)
+	recordFailed := func(reason string) {
+		meter.Count("fulfillment.shipment.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", reason),
+		))
+	}
 
 	if input.ShopID == uuid.Nil || input.OrderID == uuid.Nil {
+		recordFailed("invalid_input")
 		return fmt.Errorf("%w: shop and order IDs are required", ErrAdminInvalidShipmentInput)
 	}
 
@@ -307,39 +327,50 @@ func (s *AdminService) ShipOrder(ctx context.Context, input ShipOrderInput) erro
 	carrier := ResolveShippingCarrier(input.ShippingProvider, input.Carrier, input.OtherCarrier)
 	carrier = strings.TrimSpace(carrier)
 	if trackingNumber == "" || carrier == "" {
+		recordFailed("missing_tracking_details")
 		return fmt.Errorf("%w: tracking number and carrier are required", ErrAdminInvalidShipmentInput)
 	}
 
 	order, err := s.orderStore.GetByID(ctx, input.OrderID)
 	if err != nil {
+		recordFailed("order_lookup_failed")
 		return fmt.Errorf("%w: %w", ErrAdminOrderNotFound, err)
 	}
 	if order.ShopID != input.ShopID {
+		recordFailed("order_shop_mismatch")
 		return fmt.Errorf("%w: order does not belong to shop", ErrAdminOrderNotFound)
 	}
 
 	if order.Status != db.StatusPaid && order.Status != db.StatusShipped {
+		recordFailed("invalid_order_status")
 		return fmt.Errorf("%w: only paid or shipped orders can be updated", ErrAdminOrderStatusConflict)
 	}
 
+	action := "update_shipment_details"
 	if order.Status == db.StatusPaid {
+		action = "mark_shipped"
 		if err := s.orderStore.MarkShipped(ctx, input.OrderID, trackingNumber, carrier); err != nil {
 			if errors.Is(err, db.ErrInvalidStatusTransition) {
+				recordFailed("invalid_status_transition")
 				return fmt.Errorf("%w: %w", ErrAdminOrderStatusConflict, err)
 			}
+			recordFailed("mark_shipped_failed")
 			return fmt.Errorf("failed to mark order as shipped: %w", err)
 		}
 	} else {
 		if err := s.orderStore.UpdateShipmentDetails(ctx, input.OrderID, trackingNumber, carrier); err != nil {
 			if errors.Is(err, db.ErrInvalidStatusTransition) {
+				recordFailed("invalid_status_transition")
 				return fmt.Errorf("%w: %w", ErrAdminOrderStatusConflict, err)
 			}
+			recordFailed("update_shipment_failed")
 			return fmt.Errorf("failed to update shipment details: %w", err)
 		}
 	}
 
 	shop, err := s.shopStore.GetByID(ctx, input.ShopID)
 	if err != nil {
+		recordFailed("shop_lookup_failed")
 		return fmt.Errorf("%w: %w", ErrAdminShopNotFound, err)
 	}
 
@@ -349,6 +380,9 @@ func (s *AdminService) ShipOrder(ctx context.Context, input ShipOrderInput) erro
 		TrackingURL:     trackingURL,
 		TrackingCarrier: carrier,
 	}); err != nil {
+		meter.Count("fulfillment.shipment.side_effect_failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "shipping_email_failed"),
+		))
 		logger.Error("failed to send shipping email", "error", err, "order_id", input.OrderID)
 	}
 
@@ -359,14 +393,26 @@ func (s *AdminService) ShipOrder(ctx context.Context, input ShipOrderInput) erro
 	}
 
 	if err := client.CreateComment(ctx, shop.GitHubRepoFullName, order.GitHubIssueNumber, commentBody); err != nil {
+		meter.Count("fulfillment.shipment.side_effect_failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "github_comment_failed"),
+		))
 		logger.Error("failed to create GitHub comment", "error", err, "issue", order.GitHubIssueNumber, "shop_id", shop.ID)
 	}
 	if err := client.RemoveLabel(ctx, shop.GitHubRepoFullName, order.GitHubIssueNumber, "gitshop:status:paid"); err != nil {
+		meter.Count("fulfillment.shipment.side_effect_failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "github_remove_label_failed"),
+		))
 		logger.Warn("failed to remove paid label", "error", err, "issue", order.GitHubIssueNumber, "shop_id", shop.ID)
 	}
 	if err := client.AddLabels(ctx, shop.GitHubRepoFullName, order.GitHubIssueNumber, []string{"gitshop:status:shipped"}); err != nil {
+		meter.Count("fulfillment.shipment.side_effect_failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "github_add_label_failed"),
+		))
 		logger.Warn("failed to add shipped label", "error", err, "issue", order.GitHubIssueNumber, "shop_id", shop.ID)
 	}
+	meter.Count("fulfillment.shipment.processed", 1, sentry.WithAttributes(
+		attribute.String("action", action),
+	))
 
 	return nil
 }

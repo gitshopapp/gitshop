@@ -14,12 +14,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 
 	"github.com/gitshopapp/gitshop/internal/config"
 	"github.com/gitshopapp/gitshop/internal/db"
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 var (
@@ -98,7 +101,7 @@ func NewAuthService(cfg *config.Config, shopStore *db.ShopStore, logger *slog.Lo
 			RedirectURL:  gitHubOAuthRedirectURL(cfg.BaseURL),
 		},
 		gitHubAppID: gitHubAppID,
-		httpClient:  &http.Client{Timeout: 10 * time.Second},
+		httpClient:  observability.NewHTTPClient(10 * time.Second),
 		logger:      logger,
 	}, nil
 }
@@ -130,23 +133,48 @@ func (s *AuthService) StartGitHubLogin() (StartGitHubLoginResult, error) {
 }
 
 func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGitHubOAuthInput) (CompleteGitHubOAuthResult, error) {
+	span := sentry.StartSpan(
+		ctx,
+		"service.auth.complete_github_oauth",
+		sentry.WithOpName("service.auth"),
+		sentry.WithDescription("CompleteGitHubOAuth"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
 	result := CompleteGitHubOAuthResult{}
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter.Count("auth.oauth.received", 1, sentry.WithAttributes(
+		attribute.String("source", "github_oauth"),
+	))
+	recordFailed := func(reason string) {
+		meter.Count("auth.oauth.failed", 1, sentry.WithAttributes(
+			attribute.String("source", "github_oauth"),
+			attribute.String("reason", reason),
+		))
+	}
+
 	if s == nil || s.oauthConfig == nil || s.httpClient == nil || s.shopStore == nil {
+		recordFailed("service_unavailable")
 		return result, ErrAuthUnavailable
 	}
 
 	code := strings.TrimSpace(input.Code)
 	if code == "" {
+		recordFailed("missing_code")
 		return result, ErrAuthInvalidCode
 	}
 
 	token, err := s.oauthConfig.Exchange(ctx, code)
 	if err != nil {
+		recordFailed("code_exchange_failed")
 		return result, fmt.Errorf("%w: %v", ErrAuthCodeExchange, err)
 	}
 
 	user, err := s.getGitHubUser(ctx, token.AccessToken)
 	if err != nil {
+		recordFailed("github_user_fetch_failed")
 		return result, fmt.Errorf("%w: %v", ErrAuthGetGitHubUser, err)
 	}
 
@@ -154,17 +182,29 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 
 	installationID, err := s.resolveAuthorizedInstallationID(ctx, token.AccessToken, input.PreferredInstallationIDs)
 	if err != nil {
+		meter.Count("auth.oauth.unresolved", 1, sentry.WithAttributes(
+			attribute.String("source", "github_oauth"),
+			attribute.String("reason", "installation_resolution_failed"),
+		))
 		result.ResolutionError = err
 		return result, nil
 	}
 
 	result.InstallationID = installationID
 	if installationID <= 0 {
+		meter.Count("auth.oauth.processed", 1, sentry.WithAttributes(
+			attribute.String("source", "github_oauth"),
+			attribute.String("outcome", "no_installations"),
+		))
 		return result, nil
 	}
 
 	shops, err := s.shopStore.GetConnectedShopsByInstallationID(ctx, installationID)
 	if err != nil {
+		meter.Count("auth.oauth.unresolved", 1, sentry.WithAttributes(
+			attribute.String("source", "github_oauth"),
+			attribute.String("reason", "shop_lookup_failed"),
+		))
 		result.ResolutionError = fmt.Errorf("failed to get shops for installation %d: %w", installationID, err)
 		result.Shops = []*db.Shop{}
 		return result, nil
@@ -174,6 +214,18 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 	if len(shops) == 1 {
 		result.ShopID = shops[0].ID
 	}
+
+	outcome := "multiple_shops"
+	switch len(shops) {
+	case 0:
+		outcome = "no_shops"
+	case 1:
+		outcome = "single_shop"
+	}
+	meter.Count("auth.oauth.processed", 1, sentry.WithAttributes(
+		attribute.String("source", "github_oauth"),
+		attribute.String("outcome", outcome),
+	))
 
 	return result, nil
 }

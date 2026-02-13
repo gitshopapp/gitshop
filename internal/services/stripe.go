@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/uuid"
 	stripeapi "github.com/stripe/stripe-go/v84"
 
@@ -52,24 +54,47 @@ type checkoutSessionPayload struct {
 }
 
 func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payload []byte) error {
+	span := sentry.StartSpan(
+		ctx,
+		"service.stripe.checkout_session_completed",
+		sentry.WithOpName("service.stripe"),
+		sentry.WithDescription("HandleCheckoutSessionCompleted"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
 	logger := s.loggerFromContext(ctx)
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	baseAttrs := []attribute.Builder{attribute.String("event", "checkout.session.completed")}
+	recordFailed := func(reason string) {
+		meter.Count("payment.webhook.failed", 1, sentry.WithAttributes(
+			attribute.String("event", "checkout.session.completed"),
+			attribute.String("reason", reason),
+		))
+	}
+	meter.Count("payment.webhook.received", 1, sentry.WithAttributes(baseAttrs...))
 
 	var session checkoutSessionPayload
 	if err := json.Unmarshal(payload, &session); err != nil {
+		recordFailed("invalid_payload")
 		return fmt.Errorf("invalid event object: %w", err)
 	}
 
 	if session.ID == "" {
+		recordFailed("missing_session_id")
 		return fmt.Errorf("missing session ID")
 	}
 
 	orderID, issueNumber, repoFullName, err := parseStripeMetadata(session.Metadata)
 	if err != nil {
+		recordFailed("invalid_metadata")
 		return err
 	}
 
 	order, err := s.orderStore.GetByStripeSessionID(ctx, session.ID)
 	if err != nil {
+		recordFailed("order_lookup_failed")
 		return fmt.Errorf("failed to get order: %w", err)
 	}
 
@@ -83,14 +108,23 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 
 	if markErr := s.orderStore.MarkPaid(ctx, orderID, paymentIntentID, customerEmail, customerName, shippingAddress); markErr != nil {
 		if errors.Is(markErr, db.ErrInvalidStatusTransition) {
+			meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
+				attribute.String("event", "checkout.session.completed"),
+				attribute.String("reason", "invalid_status_transition"),
+			))
 			logger.Info("ignoring checkout.session.completed due to state transition", "order_id", orderID, "session_id", session.ID, "error", markErr)
 			return nil
 		}
+		recordFailed("mark_paid_failed")
 		return fmt.Errorf("failed to mark order as paid: %w", markErr)
 	}
+	meter.Count("payment.succeeded", 1, sentry.WithAttributes(
+		attribute.String("source", "checkout_session_completed"),
+	))
 
 	shop, err := s.shopStore.GetByID(ctx, order.ShopID)
 	if err != nil {
+		recordFailed("shop_lookup_failed")
 		logger.Error("failed to get shop", "error", err, "shop_id", order.ShopID)
 		return fmt.Errorf("failed to get shop: %w", err)
 	}
@@ -99,6 +133,10 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 
 	comment := "✅ Payment received! We’re preparing your order now."
 	if err := githubClient.CreateComment(ctx, repoFullName, issueNumber, comment); err != nil {
+		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
+			attribute.String("event", "checkout.session.completed"),
+			attribute.String("reason", "github_comment_failed"),
+		))
 		logger.Error("failed to create payment received comment", "error", err, "repo", repoFullName, "issue", issueNumber)
 	}
 
@@ -113,6 +151,10 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 	s.deleteCheckoutLinkComments(ctx, githubClient, repoFullName, issueNumber)
 
 	if err := s.sendOrderConfirmationEmail(ctx, shop, order, customerEmail, customerName, shippingAddress); err != nil {
+		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
+			attribute.String("event", "checkout.session.completed"),
+			attribute.String("reason", "email_confirmation_failed"),
+		))
 		logger.Error("failed to send order confirmation email", "error", err, "order_id", orderID)
 		internalIssueTitle := fmt.Sprintf("[GitShop Internal] Email failed for order #%d", order.OrderNumber)
 		internalIssueBody := fmt.Sprintf("**Order #%d** on %s\n\n**Error:** Email delivery failed. Check server logs for details.\n\n**Order Issue:** https://github.com/%s/issues/%d", order.OrderNumber, shop.GitHubRepoFullName, repoFullName, issueNumber)
@@ -128,41 +170,74 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 			}
 		}
 	}
+	meter.Count("payment.webhook.processed", 1, sentry.WithAttributes(baseAttrs...))
 
 	return nil
 }
 
 func (s *StripeService) HandleCheckoutSessionExpired(ctx context.Context, payload []byte) error {
+	span := sentry.StartSpan(
+		ctx,
+		"service.stripe.checkout_session_expired",
+		sentry.WithOpName("service.stripe"),
+		sentry.WithDescription("HandleCheckoutSessionExpired"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
 	logger := s.loggerFromContext(ctx)
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	baseAttrs := []attribute.Builder{attribute.String("event", "checkout.session.expired")}
+	recordFailed := func(reason string) {
+		meter.Count("payment.webhook.failed", 1, sentry.WithAttributes(
+			attribute.String("event", "checkout.session.expired"),
+			attribute.String("reason", reason),
+		))
+	}
+	meter.Count("payment.webhook.received", 1, sentry.WithAttributes(baseAttrs...))
 
 	var session checkoutSessionPayload
 	if err := json.Unmarshal(payload, &session); err != nil {
+		recordFailed("invalid_payload")
 		return fmt.Errorf("invalid event object: %w", err)
 	}
 
 	if session.ID == "" {
+		recordFailed("missing_session_id")
 		return fmt.Errorf("missing session ID")
 	}
 
 	orderID, issueNumber, repoFullName, err := parseStripeMetadata(session.Metadata)
 	if err != nil {
+		recordFailed("invalid_metadata")
 		return err
 	}
 
 	order, err := s.orderStore.GetByStripeSessionID(ctx, session.ID)
 	if err != nil {
+		recordFailed("order_lookup_failed")
 		return fmt.Errorf("failed to get order: %w", err)
 	}
 	if markErr := s.orderStore.MarkExpired(ctx, order.ID); markErr != nil {
 		if errors.Is(markErr, db.ErrInvalidStatusTransition) {
+			meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
+				attribute.String("event", "checkout.session.expired"),
+				attribute.String("reason", "invalid_status_transition"),
+			))
 			logger.Info("ignoring checkout.session.expired due to state transition", "order_id", order.ID, "session_id", session.ID, "error", markErr)
 			return nil
 		}
+		recordFailed("mark_expired_failed")
 		return fmt.Errorf("failed to mark order as expired: %w", markErr)
 	}
+	meter.Count("payment.checkout.expired", 1, sentry.WithAttributes(
+		attribute.String("source", "checkout_session_expired"),
+	))
 
 	shop, err := s.shopStore.GetByID(ctx, order.ShopID)
 	if err != nil {
+		recordFailed("shop_lookup_failed")
 		logger.Error("failed to get shop", "error", err, "shop_id", order.ShopID)
 		return fmt.Errorf("failed to get shop: %w", err)
 	}
@@ -170,6 +245,10 @@ func (s *StripeService) HandleCheckoutSessionExpired(ctx context.Context, payloa
 	expireComment := "⏰ Your checkout link expired. Please place a new order when you're ready."
 	githubClient := s.githubClient.WithInstallation(shop.GitHubInstallationID)
 	if err := githubClient.CreateComment(ctx, repoFullName, issueNumber, expireComment); err != nil {
+		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
+			attribute.String("event", "checkout.session.expired"),
+			attribute.String("reason", "github_comment_failed"),
+		))
 		logger.Error("failed to create expiration comment", "error", err, "repo", repoFullName, "issue", issueNumber)
 	}
 	if err := githubClient.RemoveLabel(ctx, repoFullName, issueNumber, "gitshop:status:pending-payment"); err != nil {
@@ -181,45 +260,82 @@ func (s *StripeService) HandleCheckoutSessionExpired(ctx context.Context, payloa
 	s.deleteCheckoutLinkComments(ctx, githubClient, repoFullName, issueNumber)
 
 	logger.Info("checkout session expired handled", "order_id", orderID, "repo", repoFullName, "issue", issueNumber)
+	meter.Count("payment.webhook.processed", 1, sentry.WithAttributes(baseAttrs...))
 	return nil
 }
 
 func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload []byte) error {
+	span := sentry.StartSpan(
+		ctx,
+		"service.stripe.payment_intent_failed",
+		sentry.WithOpName("service.stripe"),
+		sentry.WithDescription("HandlePaymentIntentFailed"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
 	logger := s.loggerFromContext(ctx)
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	baseAttrs := []attribute.Builder{attribute.String("event", "payment_intent.payment_failed")}
+	recordFailed := func(reason string) {
+		meter.Count("payment.webhook.failed", 1, sentry.WithAttributes(
+			attribute.String("event", "payment_intent.payment_failed"),
+			attribute.String("reason", reason),
+		))
+	}
+	meter.Count("payment.webhook.received", 1, sentry.WithAttributes(baseAttrs...))
 
 	var intent stripeapi.PaymentIntent
 	if err := json.Unmarshal(payload, &intent); err != nil {
+		recordFailed("invalid_payload")
 		return fmt.Errorf("invalid event object: %w", err)
 	}
 
 	if intent.ID == "" {
+		recordFailed("missing_payment_intent_id")
 		return fmt.Errorf("missing payment intent ID")
 	}
 
 	if len(intent.Metadata) == 0 {
+		meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
+			attribute.String("event", "payment_intent.payment_failed"),
+			attribute.String("reason", "missing_metadata"),
+		))
 		logger.Info("payment intent missing metadata; skipping", "intent_id", intent.ID)
 		return nil
 	}
 
 	orderID, issueNumber, repoFullName, err := parseStripeMetadata(intent.Metadata)
 	if err != nil {
+		recordFailed("invalid_metadata")
 		return err
 	}
 
 	order, err := s.orderStore.GetByID(ctx, orderID)
 	if err != nil {
+		recordFailed("order_lookup_failed")
 		return fmt.Errorf("failed to get order: %w", err)
 	}
 	if markErr := s.orderStore.MarkFailed(ctx, orderID, "payment_intent_failed"); markErr != nil {
 		if errors.Is(markErr, db.ErrInvalidStatusTransition) {
+			meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
+				attribute.String("event", "payment_intent.payment_failed"),
+				attribute.String("reason", "invalid_status_transition"),
+			))
 			logger.Info("ignoring payment_intent.payment_failed due to state transition", "order_id", orderID, "intent_id", intent.ID, "error", markErr)
 			return nil
 		}
+		recordFailed("mark_failed_status_failed")
 		return fmt.Errorf("failed to mark order as payment_failed: %w", markErr)
 	}
+	meter.Count("payment.failed", 1, sentry.WithAttributes(
+		attribute.String("source", "payment_intent_failed"),
+	))
 
 	shop, err := s.shopStore.GetByID(ctx, order.ShopID)
 	if err != nil {
+		recordFailed("shop_lookup_failed")
 		logger.Error("failed to get shop", "error", err, "shop_id", order.ShopID)
 		return fmt.Errorf("failed to get shop: %w", err)
 	}
@@ -227,6 +343,10 @@ func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload [
 	failComment := "❌ Payment failed. The checkout link is no longer active. Ask the seller for help or add a new comment `.gitshop retry`."
 	githubClient := s.githubClient.WithInstallation(shop.GitHubInstallationID)
 	if err := githubClient.CreateComment(ctx, repoFullName, issueNumber, failComment); err != nil {
+		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
+			attribute.String("event", "payment_intent.payment_failed"),
+			attribute.String("reason", "github_comment_failed"),
+		))
 		logger.Error("failed to create payment failure comment", "error", err, "repo", repoFullName, "issue", issueNumber)
 	}
 	if err := githubClient.RemoveLabel(ctx, repoFullName, issueNumber, "gitshop:status:pending-payment"); err != nil {
@@ -238,6 +358,7 @@ func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload [
 	s.deleteCheckoutLinkComments(ctx, githubClient, repoFullName, issueNumber)
 
 	logger.Info("payment failure handled", "order_id", orderID, "repo", repoFullName, "issue", issueNumber)
+	meter.Count("payment.webhook.processed", 1, sentry.WithAttributes(baseAttrs...))
 	return nil
 }
 

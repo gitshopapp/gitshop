@@ -16,6 +16,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/oauth2"
+
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 type tokenCacheEntry struct {
@@ -50,7 +52,7 @@ func NewAuth(appIDStr, privateKeyBase64 string) (*Auth, error) {
 	return &Auth{
 		appID:      appID,
 		privateKey: privateKey,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: observability.NewHTTPClient(10 * time.Second),
 		tokenCache: make(map[int64]*tokenCacheEntry),
 	}, nil
 }

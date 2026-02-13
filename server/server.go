@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/gorilla/mux"
 
 	"github.com/gitshopapp/gitshop/internal/config"
@@ -41,9 +43,15 @@ func New(cfg *config.Config, logger *slog.Logger, h *handlers.Handlers) (*Server
 	}
 
 	router := s.buildRouter()
+	var handler http.Handler = router
+	if strings.TrimSpace(cfg.SentryDSN) != "" {
+		handler = sentryhttp.New(sentryhttp.Options{
+			Repanic: true,
+		}).Handle(handler)
+	}
 	s.httpServer = &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           router,
+		Handler:           handler,
 		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      15 * time.Second,

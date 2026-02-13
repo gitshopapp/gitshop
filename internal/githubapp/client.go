@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/go-github/v66/github"
 	"golang.org/x/oauth2"
+
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 type Client struct {
@@ -44,6 +46,7 @@ func (c *Client) getGitHubClient(ctx context.Context) (*github.Client, error) {
 	ts := oauth2.StaticTokenSource(token)
 	tc := oauth2.NewClient(ctx, ts)
 	tc.Timeout = 15 * time.Second
+	tc.Transport = observability.WrapRoundTripper(tc.Transport)
 
 	return github.NewClient(tc), nil
 }

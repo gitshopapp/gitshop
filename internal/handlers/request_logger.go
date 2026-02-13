@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 
@@ -37,6 +40,7 @@ func (w *loggingResponseWriter) Write(b []byte) (int, error) {
 func (h *Handlers) RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		route := routeLabel(r)
 
 		requestID := requestIDFromRequest(r)
 		w.Header().Set("X-Request-ID", requestID)
@@ -48,7 +52,7 @@ func (h *Handlers) RequestLogger(next http.Handler) http.Handler {
 			"remote_ip", clientIP(r),
 		)
 
-		if route := routeLabel(r); route != "" {
+		if route != "" {
 			logger = logger.With("route", route)
 		}
 
@@ -72,18 +76,44 @@ func (h *Handlers) RequestLogger(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
+		durationMs := float64(time.Since(start).Milliseconds())
+
+		metricRoute := route
+		if metricRoute == "" {
+			metricRoute = "unknown"
+		}
+		metricAttrs := []attribute.Builder{
+			attribute.String("http.method", r.Method),
+			attribute.String("http.route", metricRoute),
+			attribute.Int("http.status_code", status),
+		}
+		meter := sentry.NewMeter(ctx).WithCtx(ctx)
+		meter.Count("http.server.requests", 1, sentry.WithAttributes(metricAttrs...))
+		meter.Distribution(
+			"http.server.duration",
+			durationMs,
+			sentry.WithUnit(sentry.UnitMillisecond),
+			sentry.WithAttributes(
+				attribute.String("http.method", r.Method),
+				attribute.String("http.route", metricRoute),
+				attribute.String("http.status_class", fmt.Sprintf("%dxx", status/100)),
+			),
+		)
+		if status >= http.StatusInternalServerError {
+			meter.Count("http.server.errors", 1, sentry.WithAttributes(metricAttrs...))
+		}
 
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			// log asset requests as debug
 			logger.Debug("asset request completed",
 				"status", status,
-				"duration_ms", time.Since(start).Milliseconds(),
+				"duration_ms", int64(durationMs),
 				"bytes", wrapped.bytes,
 			)
 		} else {
 			logger.Info("request completed",
 				"status", status,
-				"duration_ms", time.Since(start).Milliseconds(),
+				"duration_ms", int64(durationMs),
 				"bytes", wrapped.bytes,
 			)
 		}

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/go-github/v66/github"
 	"github.com/jackc/pgx/v5"
 
@@ -87,7 +89,26 @@ type IssueCommentCreatedInput struct {
 }
 
 func (s *OrderService) HandleIssueOpened(ctx context.Context, input IssueOpenedInput) error {
+	span := sentry.StartSpan(
+		ctx,
+		"service.order.handle_issue_opened",
+		sentry.WithOpName("service.order"),
+		sentry.WithDescription("HandleIssueOpened"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
 	logger := s.loggerFromContext(ctx)
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	baseAttrs := []attribute.Builder{attribute.String("source", "issue_opened")}
+	recordFailure := func(reason string) {
+		meter.Count("order.intake.failed", 1, sentry.WithAttributes(
+			attribute.String("source", "issue_opened"),
+			attribute.String("reason", reason),
+		))
+	}
+	meter.Count("order.intake.received", 1, sentry.WithAttributes(baseAttrs...))
 
 	githubClient := s.githubClient.WithInstallation(input.InstallationID)
 
@@ -101,13 +122,16 @@ func (s *OrderService) HandleIssueOpened(ctx context.Context, input IssueOpenedI
 		}
 	}
 	if err != nil {
+		recordFailure("shop_lookup_failed")
 		return fmt.Errorf("failed to get shop: %w", err)
 	}
 
 	if !shop.IsConnected() {
+		recordFailure("shop_disconnected")
 		return fmt.Errorf("shop is disconnected, cannot process orders: %s", input.RepoFullName)
 	}
 	if shop.StripeConnectAccountID == "" {
+		recordFailure("stripe_not_connected")
 		comment := s.appendManagerMention(ctx, githubClient, input.RepoFullName, "⚠️ Payments are not ready yet for this storefront. Ask the shop owner to complete Stripe setup in the GitShop dashboard.")
 		if commentErr := githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber, comment); commentErr != nil {
 			logger.Warn("failed to create stripe-not-connected comment", "error", commentErr, "repo", input.RepoFullName, "issue", input.IssueNumber)
@@ -115,6 +139,7 @@ func (s *OrderService) HandleIssueOpened(ctx context.Context, input IssueOpenedI
 		return fmt.Errorf("stripe not connected for shop: %s", shop.ID.String())
 	}
 	if s.stripePlatform == nil {
+		recordFailure("stripe_unavailable")
 		comment := s.appendManagerMention(ctx, githubClient, input.RepoFullName, "⚠️ Payments are temporarily unavailable for this GitShop instance.")
 		if commentErr := githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber, comment); commentErr != nil {
 			logger.Warn("failed to create stripe-unavailable comment", "error", commentErr, "repo", input.RepoFullName, "issue", input.IssueNumber)
@@ -134,6 +159,7 @@ func (s *OrderService) HandleIssueOpened(ctx context.Context, input IssueOpenedI
 
 	orderData, err := parseOrderFromIssue(input.IssueBody)
 	if err != nil {
+		recordFailure("order_parse_failed")
 		comment := fmt.Sprintf(`❌ **Order Error**
 
 %s
@@ -153,6 +179,7 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 
 	configContent, err := s.getGitShopConfigFile(ctx, githubClient, input.RepoFullName)
 	if err != nil {
+		recordFailure("config_missing")
 		comment := s.appendManagerMention(ctx, githubClient, input.RepoFullName, "❌ Could not find `gitshop.yaml` in the repo. Create it in the repo root to enable ordering.")
 		if commentErr := githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber, comment); commentErr != nil {
 			logger.Warn("failed to create missing-config comment", "error", commentErr, "repo", input.RepoFullName, "issue", input.IssueNumber)
@@ -162,11 +189,13 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 
 	config, err := s.parser.Parse(configContent)
 	if err != nil {
+		recordFailure("config_parse_failed")
 		return fmt.Errorf("failed to parse gitshop.yaml: %w", err)
 	}
 
 	validateErr := s.validator.Validate(config)
 	if validateErr != nil {
+		recordFailure("config_invalid")
 		comment := s.appendManagerMention(ctx, githubClient, input.RepoFullName, fmt.Sprintf("❌ `gitshop.yaml` is invalid: %s\n\nFix the file and try again.", validateErr.Error()))
 		if commentErr := githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber, comment); commentErr != nil {
 			logger.Warn("failed to create invalid-config comment", "error", commentErr, "repo", input.RepoFullName, "issue", input.IssueNumber)
@@ -177,6 +206,7 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 
 	subtotalCents, err := s.pricer.ComputeSubtotal(config, orderData.SKU, orderData.Options)
 	if err != nil {
+		recordFailure("pricing_failed")
 		comment := s.appendManagerMention(ctx, githubClient, input.RepoFullName, fmt.Sprintf("❌ We couldn't price this order yet: %s", err.Error()))
 		if commentErr := githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber, comment); commentErr != nil {
 			logger.Warn("failed to create pricing-error comment", "error", commentErr, "repo", input.RepoFullName, "issue", input.IssueNumber)
@@ -188,6 +218,7 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 
 	product := findProduct(config, orderData.SKU)
 	if product == nil {
+		recordFailure("sku_missing")
 		comment := s.appendManagerMention(ctx, githubClient, input.RepoFullName, fmt.Sprintf("❌ SKU `%s` not found in `gitshop.yaml`. Update the file and try again.", orderData.SKU))
 		if commentErr := githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber, comment); commentErr != nil {
 			logger.Warn("failed to create missing-sku comment", "error", commentErr, "repo", input.RepoFullName, "issue", input.IssueNumber)
@@ -211,8 +242,10 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 
 	createErr := s.orderStore.Create(ctx, order)
 	if createErr != nil {
+		recordFailure("order_create_failed")
 		return fmt.Errorf("failed to create order: %w", createErr)
 	}
+	meter.Count("order.created", 1, sentry.WithAttributes(baseAttrs...))
 
 	quantity := int64(orderQuantity(orderData.Options))
 	checkoutParams := stripe.CheckoutSessionParams{
@@ -233,6 +266,11 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 
 	session, err := s.stripePlatform.CreateCheckoutSession(ctx, checkoutParams)
 	if err != nil {
+		recordFailure("checkout_create_failed")
+		meter.Count("checkout.session.failed", 1, sentry.WithAttributes(
+			attribute.String("source", "issue_opened"),
+			attribute.String("reason", "create_failed"),
+		))
 		if markErr := s.orderStore.MarkFailed(ctx, order.ID, "stripe_checkout_failed"); markErr != nil {
 			logger.Warn("failed to mark order failed after checkout error", "error", markErr, "order_id", order.ID)
 		}
@@ -244,28 +282,46 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 	}
 
 	if err := s.orderStore.UpdateStripeSession(ctx, order.ID, session.ID); err != nil {
+		recordFailure("order_update_stripe_session_failed")
 		return fmt.Errorf("failed to update order with session ID: %w", err)
 	}
 
 	comment := fmt.Sprintf("🛍️ Thanks for your order! Complete payment here: %s\n\nThis checkout link expires in 30 minutes.\n\n<!-- gitshop:checkout-link -->", session.URL)
 	if err := githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber, comment); err != nil {
+		recordFailure("checkout_comment_failed")
 		return fmt.Errorf("failed to create comment: %w", err)
 	}
 
 	s.ensureIssueNumberInTitle(ctx, githubClient, input.RepoFullName, input.IssueNumber, input.IssueTitle)
 
 	if err := githubClient.AddLabels(ctx, input.RepoFullName, input.IssueNumber, []string{"gitshop:status:pending-payment"}); err != nil {
+		recordFailure("label_add_failed")
 		return fmt.Errorf("failed to add label: %w", err)
 	}
+	meter.Count("checkout.session.created", 1, sentry.WithAttributes(baseAttrs...))
 
 	return nil
 }
 
 func (s *OrderService) HandleIssueCommentCreated(ctx context.Context, input IssueCommentCreatedInput) error {
+	span := sentry.StartSpan(
+		ctx,
+		"service.order.handle_issue_comment_created",
+		sentry.WithOpName("service.order"),
+		sentry.WithDescription("HandleIssueCommentCreated"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
 	commentBody := strings.TrimSpace(input.CommentBody)
 	if commentBody != ".gitshop retry" {
 		return nil
 	}
+	meter.Count("order.retry.received", 1, sentry.WithAttributes(
+		attribute.String("source", "issue_comment"),
+	))
 
 	githubClient := s.githubClient.WithInstallation(input.InstallationID)
 
@@ -278,16 +334,25 @@ func (s *OrderService) HandleIssueCommentCreated(ctx context.Context, input Issu
 	}
 	shop, err := s.shopStore.GetByInstallationAndRepoID(ctx, input.InstallationID, input.RepoID)
 	if err != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "shop_lookup_failed"),
+		))
 		return fmt.Errorf("failed to get shop: %w", err)
 	}
 
 	if !shop.IsConnected() {
+		meter.Count("order.retry.rejected", 1, sentry.WithAttributes(
+			attribute.String("reason", "shop_disconnected"),
+		))
 		return githubClient.CreateComment(ctx, input.RepoFullName, input.IssueNumber,
 			"❌ This shop is currently disconnected. Please reconnect the GitHub App to use GitShop commands.")
 	}
 
 	order, err := s.orderStore.GetByShopAndIssue(ctx, shop.ID, input.IssueNumber)
 	if err != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "order_lookup_failed"),
+		))
 		return fmt.Errorf("failed to get order: %w", err)
 	}
 
@@ -303,38 +368,73 @@ func (s *OrderService) executeCommand(ctx context.Context, client *githubapp.Cli
 }
 
 func (s *OrderService) handleRetryCommand(ctx context.Context, client *githubapp.Client, repoFullName string, issueNumber int, order *db.Order, commenterLogin string, hasPermission bool, shop *db.Shop) error {
+	span := sentry.StartSpan(
+		ctx,
+		"service.order.handle_retry_command",
+		sentry.WithOpName("service.order"),
+		sentry.WithDescription("handleRetryCommand"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
+	meter := sentry.NewMeter(ctx).WithCtx(ctx)
 	if order == nil || shop == nil {
+		meter.Count("order.retry.rejected", 1, sentry.WithAttributes(
+			attribute.String("reason", "order_not_found"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, "❌ Order not found.")
 	}
 
 	if !hasPermission && commenterLogin != order.GitHubUsername {
+		meter.Count("order.retry.rejected", 1, sentry.WithAttributes(
+			attribute.String("reason", "permission_denied"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, "❌ Only the issue author or a repo admin can retry order creation.")
 	}
 
 	if order.Status != db.StatusPaymentFailed {
+		meter.Count("order.retry.rejected", 1, sentry.WithAttributes(
+			attribute.String("reason", "invalid_order_status"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, "⚠️ This order doesn't need a retry right now.")
 	}
 
 	if s.stripePlatform == nil || shop.StripeConnectAccountID == "" {
+		meter.Count("order.retry.rejected", 1, sentry.WithAttributes(
+			attribute.String("reason", "stripe_unavailable"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, s.appendManagerMention(ctx, client, repoFullName, "❌ Stripe is not connected for this shop yet."))
 	}
 
 	configContent, err := s.getGitShopConfigFile(ctx, client, repoFullName)
 	if err != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "config_missing"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, s.appendManagerMention(ctx, client, repoFullName, "❌ `gitshop.yaml` is missing. Fix it before retrying."))
 	}
 
 	config, err := s.parser.Parse(configContent)
 	if err != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "config_invalid"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, s.appendManagerMention(ctx, client, repoFullName, "❌ `gitshop.yaml` is invalid. Fix it before retrying."))
 	}
 
 	if validateErr := s.validator.Validate(config); validateErr != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "config_invalid"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, s.appendManagerMention(ctx, client, repoFullName, "❌ `gitshop.yaml` is invalid. Fix it before retrying."))
 	}
 
 	product := findProduct(config, order.SKU)
 	if product == nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "sku_missing"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, s.appendManagerMention(ctx, client, repoFullName, "❌ SKU not found in `gitshop.yaml`. Update the file and retry."))
 	}
 
@@ -357,17 +457,36 @@ func (s *OrderService) handleRetryCommand(ctx context.Context, client *githubapp
 
 	session, err := s.stripePlatform.CreateCheckoutSession(ctx, checkoutParams)
 	if err != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "checkout_create_failed"),
+		))
+		meter.Count("checkout.session.failed", 1, sentry.WithAttributes(
+			attribute.String("source", "retry"),
+			attribute.String("reason", "create_failed"),
+		))
 		return client.CreateComment(ctx, repoFullName, issueNumber, s.appendManagerMention(ctx, client, repoFullName, "❌ Retry failed to create a checkout link. Please try again later."))
 	}
 
 	if err := s.orderStore.MarkPendingPayment(ctx, order.ID, session.ID); err != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "mark_pending_failed"),
+		))
 		return fmt.Errorf("failed to update order after retry: %w", err)
 	}
 
 	comment := fmt.Sprintf("🛍️ Thanks for your order! Complete payment here: %s\n\nThis checkout link expires in 30 minutes.\n\n<!-- gitshop:checkout-link -->", session.URL)
 	if err := client.CreateComment(ctx, repoFullName, issueNumber, comment); err != nil {
+		meter.Count("order.retry.failed", 1, sentry.WithAttributes(
+			attribute.String("reason", "checkout_comment_failed"),
+		))
 		return fmt.Errorf("failed to comment checkout link: %w", err)
 	}
+	meter.Count("order.retry.succeeded", 1, sentry.WithAttributes(
+		attribute.String("source", "issue_comment"),
+	))
+	meter.Count("checkout.session.created", 1, sentry.WithAttributes(
+		attribute.String("source", "retry"),
+	))
 
 	return nil
 }

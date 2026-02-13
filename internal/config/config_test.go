@@ -135,6 +135,36 @@ func TestValidateBaseURLAllowsLocalhostHTTP(t *testing.T) {
 	}
 }
 
+func TestValidateEnvironment(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Environment = "staging"
+
+	err := cfg.validate()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "Environment") || !strings.Contains(err.Error(), "oneof") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateSentryTracesSampleRate(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.SentryTracesSampleRate = 1.5
+
+	err := cfg.validate()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "SentryTracesSampleRate") || !strings.Contains(err.Error(), "lte") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func validConfig() *Config {
 	return &Config{
 		DatabaseURL:            "postgres://user:pass@localhost:5432/gitshop",
@@ -148,6 +178,8 @@ func validConfig() *Config {
 		RedisConnectionString:  "redis://localhost:6379/0",
 		EncryptionKey:          strings.Repeat("k", 32),
 		LogFormat:              "text",
+		Environment:            "development",
+		SentryTracesSampleRate: 0.2,
 	}
 }
 
@@ -174,5 +206,11 @@ func TestLoadParsesUppercaseLogLevel(t *testing.T) {
 	}
 	if cfg.GitHubAppURL != "https://github.com/apps/gitshopapp" {
 		t.Fatalf("expected default GitHub app URL, got %q", cfg.GitHubAppURL)
+	}
+	if cfg.Environment != "development" {
+		t.Fatalf("expected default environment, got %q", cfg.Environment)
+	}
+	if cfg.SentryTracesSampleRate != 0.2 {
+		t.Fatalf("expected default sentry traces sample rate, got %v", cfg.SentryTracesSampleRate)
 	}
 }

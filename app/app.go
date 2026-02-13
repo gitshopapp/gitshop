@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryslog "github.com/getsentry/sentry-go/slog"
 	"github.com/lmittmann/tint"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,10 +22,13 @@ import (
 	"github.com/gitshopapp/gitshop/internal/email"
 	"github.com/gitshopapp/gitshop/internal/githubapp"
 	"github.com/gitshopapp/gitshop/internal/handlers"
+	"github.com/gitshopapp/gitshop/internal/logging"
 	"github.com/gitshopapp/gitshop/internal/services"
 	"github.com/gitshopapp/gitshop/internal/session"
 	"github.com/gitshopapp/gitshop/internal/stripe"
 )
+
+const sentryFlushTimeout = 5 * time.Second
 
 type App struct {
 	Config         *config.Config
@@ -32,6 +37,7 @@ type App struct {
 	CacheProvider  cache.Provider
 	SessionManager *session.Manager
 	Handlers       *handlers.Handlers
+	sentryEnabled  bool
 }
 
 func New() (*App, error) {
@@ -40,7 +46,10 @@ func New() (*App, error) {
 		return nil, err
 	}
 
-	logger := newLogger(cfg)
+	logger, sentryEnabled, err := newLogger(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
 
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer startupCancel()
@@ -171,6 +180,7 @@ func New() (*App, error) {
 		CacheProvider:  cacheProvider,
 		SessionManager: sessionManager,
 		Handlers:       h,
+		sentryEnabled:  sentryEnabled,
 	}, nil
 }
 
@@ -187,23 +197,53 @@ func (a *App) Close() {
 	if a.DB != nil {
 		a.DB.Close()
 	}
+	if a.sentryEnabled {
+		if flushed := sentry.Flush(sentryFlushTimeout); !flushed && a.Logger != nil {
+			a.Logger.Warn("timed out while flushing sentry events")
+		}
+	}
 }
 
-func newLogger(cfg *config.Config) *slog.Logger {
-	opts := &slog.HandlerOptions{
-		Level: cfg.LogLevel,
+func newLogger(cfg *config.Config) (*slog.Logger, bool, error) {
+	consoleHandler := newConsoleHandler(cfg)
+	sentryDSN := strings.TrimSpace(cfg.SentryDSN)
+	if sentryDSN == "" {
+		return slog.New(consoleHandler), false, nil
 	}
 
-	format := strings.ToLower(strings.TrimSpace(cfg.LogFormat))
-	switch format {
-	case "json":
-		return slog.New(slog.NewJSONHandler(os.Stdout, opts))
-	case "text", "":
-		return slog.New(tint.NewHandler(os.Stdout, &tint.Options{
-			Level: cfg.LogLevel,
-		}))
+	if err := sentry.Init(sentry.ClientOptions{
+		Dsn:              sentryDSN,
+		Environment:      strings.TrimSpace(cfg.Environment),
+		Release:          sentryRelease(cfg),
+		EnableTracing:    true,
+		TracesSampleRate: cfg.SentryTracesSampleRate,
+		EnableLogs:       true,
+	}); err != nil {
+		return nil, false, fmt.Errorf("initialize sentry: %w", err)
 	}
-	return slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: cfg.LogLevel}))
+
+	sentryHandler := sentryslog.Option{}.NewSentryHandler(context.Background())
+
+	return slog.New(logging.MultiHandler(consoleHandler, sentryHandler)), true, nil
+}
+
+func sentryRelease(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	if commit := strings.TrimSpace(cfg.RenderGitCommit); commit != "" {
+		return commit
+	}
+	return strings.TrimSpace(cfg.SentryRelease)
+}
+
+func newConsoleHandler(cfg *config.Config) slog.Handler {
+	format := strings.ToLower(strings.TrimSpace(cfg.LogFormat))
+	if format == "json" {
+		return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})
+	}
+
+	return tint.NewHandler(os.Stdout, &tint.Options{Level: cfg.LogLevel})
 }
 
 func closeSessionManager(logger *slog.Logger, manager *session.Manager) {

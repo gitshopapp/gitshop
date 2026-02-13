@@ -18,6 +18,7 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse database URL: %w", err)
 	}
+	config.ConnConfig.Tracer = newQueryTracer()
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
