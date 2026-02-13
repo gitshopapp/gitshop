@@ -39,8 +39,8 @@ func (t *queryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx
 }
 
 func (t *queryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
-	span, _ := ctx.Value(querySpanContextKey{}).(*sentry.Span)
-	if span == nil {
+	span, ok := ctx.Value(querySpanContextKey{}).(*sentry.Span)
+	if !ok || span == nil {
 		return
 	}
 
