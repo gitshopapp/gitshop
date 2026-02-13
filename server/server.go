@@ -85,6 +85,8 @@ func (s *Server) buildRouter() *mux.Router {
 	r.Use(h.SecurityHeaders)
 	r.HandleFunc("/", h.Root).Methods("GET").Name("root")
 	r.HandleFunc("/health", h.Health).Methods("GET").Name("health")
+	r.HandleFunc("/terms", h.TermsOfUse).Methods("GET").Name("legal.terms")
+	r.HandleFunc("/privacy", h.PrivacyPolicy).Methods("GET").Name("legal.privacy")
 	r.HandleFunc("/webhooks/github", h.GitHubWebhook).Methods("POST").Name("webhooks.github")
 	r.HandleFunc("/webhooks/stripe", h.StripeWebhook).Methods("POST").Name("webhooks.stripe")
 

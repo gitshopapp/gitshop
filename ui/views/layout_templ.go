@@ -24,6 +24,7 @@ type LayoutProps struct {
 	ActiveRoute  string
 	ShowNav      bool
 	HideHeader   bool
+	CenterHeader bool
 	ShowSetupNav bool
 	ShopSwitcher *ShopSwitcherProps
 }
@@ -66,7 +67,7 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 		var templ_7745c5c3_Var2 templ.SafeURL
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(utils.ScriptURL("/assets/img/favicon-32.png")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 40, Col: 118}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 41, Col: 118}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -79,7 +80,7 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 		var templ_7745c5c3_Var3 templ.SafeURL
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(utils.ScriptURL("/assets/img/favicon-32.png")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 41, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 42, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -92,7 +93,7 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 		var templ_7745c5c3_Var4 templ.SafeURL
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(utils.ScriptURL("/assets/css/app.css")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 42, Col: 86}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 43, Col: 86}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -110,7 +111,7 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(templ.SafeURL(utils.ScriptURL("/assets/img/favicon-32.png")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 55, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 56, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -217,7 +218,7 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(option.ID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 88, Col: 37}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 89, Col: 37}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
@@ -240,7 +241,7 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(option.Label)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 88, Col: 109}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 89, Col: 109}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -288,43 +289,61 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if !props.HideHeader && props.Title != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"mb-8\"><h1 class=\"text-3xl font-semibold tracking-tight\">")
+			var templ_7745c5c3_Var12 = []any{utils.TwMerge("mb-8", utils.If(props.CenterHeader, "text-center"))}
+			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var12...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var12 string
-			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(props.Title)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 104, Col: 70}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</h1>")
+			var templ_7745c5c3_Var13 string
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var12).String())
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 1, Col: 0}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\"><h1 class=\"text-3xl font-semibold tracking-tight\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var14 string
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(props.Title)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 105, Col: 70}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</h1>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if props.Subtitle != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<p class=\"mt-2 text-muted-foreground\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<p class=\"mt-2 text-muted-foreground\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var13 string
-				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(props.Subtitle)
+				var templ_7745c5c3_Var15 string
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(props.Subtitle)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 106, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 107, Col: 62}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -333,20 +352,20 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</main></div><div id=\"toast-root\"></div><script defer nonce=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</main><footer class=\"bg-background/90\"><div class=\"mx-auto flex max-w-6xl items-center justify-center gap-4 px-4 py-6 text-sm text-muted-foreground\"><a href=\"/\" class=\"transition-colors hover:text-foreground\">Home</a> <a href=\"/terms\" class=\"transition-colors hover:text-foreground\">Terms of Service</a> <a href=\"/privacy\" class=\"transition-colors hover:text-foreground\">Privacy Policy</a></div></footer></div><div id=\"toast-root\"></div><script defer nonce=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var14 string
-		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(templ.GetNonce(ctx))
+		var templ_7745c5c3_Var16 string
+		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(templ.GetNonce(ctx))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 115, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/views/layout.templ`, Line: 123, Col: 43}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\" src=\"https://unpkg.com/htmx.org@1.9.12\"></script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "\" src=\"https://unpkg.com/htmx.org@1.9.12\"></script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -370,7 +389,7 @@ func Layout(props LayoutProps, children ...templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<script>\n\t\t\t(function () {\n\t\t\t\tfunction shouldBind(form) {\n\t\t\t\t\tif (form.dataset.loading === \"false\") return false;\n\t\t\t\t\tvar method = (form.getAttribute(\"method\") || \"\").toUpperCase();\n\t\t\t\t\treturn method === \"POST\" || form.hasAttribute(\"hx-post\");\n\t\t\t\t}\n\t\t\t\tfunction hasInlineErrors(form) {\n\t\t\t\t\treturn form.hasAttribute(\"data-inline-errors\");\n\t\t\t\t}\n\t\t\t\tfunction errorKey(field) {\n\t\t\t\t\treturn field.getAttribute(\"name\") || field.getAttribute(\"id\") || \"\";\n\t\t\t\t}\n\t\t\t\tfunction clearFieldError(form, field) {\n\t\t\t\t\tif (!hasInlineErrors(form)) return;\n\t\t\t\t\tvar key = errorKey(field);\n\t\t\t\t\tif (!key) return;\n\t\t\t\t\tvar msg = form.querySelector('[data-error-for=\"' + key + '\"]');\n\t\t\t\t\tif (msg) {\n\t\t\t\t\t\tmsg.textContent = \"\";\n\t\t\t\t\t\tmsg.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t\tfield.removeAttribute(\"aria-invalid\");\n\t\t\t\t}\n\t\t\t\tfunction clearInlineErrors(form) {\n\t\t\t\t\tif (!hasInlineErrors(form)) return;\n\t\t\t\t\tform.querySelectorAll('[data-error-for]').forEach(function (msg) {\n\t\t\t\t\t\tmsg.textContent = \"\";\n\t\t\t\t\t\tmsg.classList.add(\"hidden\");\n\t\t\t\t\t});\n\t\t\t\t\tform.querySelectorAll('[aria-invalid=\"true\"]').forEach(function (field) {\n\t\t\t\t\t\tfield.removeAttribute(\"aria-invalid\");\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tfunction validationMessage(field) {\n\t\t\t\t\tif (field.validity && field.validity.valueMissing) {\n\t\t\t\t\t\treturn \"This field is required.\";\n\t\t\t\t\t}\n\t\t\t\t\tif (field.validity && field.validity.typeMismatch) {\n\t\t\t\t\t\tif (field.type === \"email\") return \"Please enter a valid email address.\";\n\t\t\t\t\t\treturn \"Please enter a valid value.\";\n\t\t\t\t\t}\n\t\t\t\t\treturn field.validationMessage || \"This field is invalid.\";\n\t\t\t\t}\n\t\t\t\tfunction showInlineErrors(form) {\n\t\t\t\t\tif (!hasInlineErrors(form)) return false;\n\t\t\t\t\tvar firstInvalid = null;\n\t\t\t\t\tArray.prototype.forEach.call(form.elements, function (field) {\n\t\t\t\t\t\tif (!field || !field.willValidate || field.disabled) return;\n\t\t\t\t\t\tif (field.checkValidity()) return;\n\t\t\t\t\t\tif (!firstInvalid) firstInvalid = field;\n\t\t\t\t\t\tfield.setAttribute(\"aria-invalid\", \"true\");\n\t\t\t\t\t\tvar key = errorKey(field);\n\t\t\t\t\t\tif (!key) return;\n\t\t\t\t\t\tvar msg = form.querySelector('[data-error-for=\"' + key + '\"]');\n\t\t\t\t\t\tif (msg) {\n\t\t\t\t\t\t\tmsg.textContent = validationMessage(field);\n\t\t\t\t\t\t\tmsg.classList.remove(\"hidden\");\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\tif (firstInvalid && typeof firstInvalid.focus === \"function\") {\n\t\t\t\t\t\tfirstInvalid.focus();\n\t\t\t\t\t}\n\t\t\t\t\treturn true;\n\t\t\t\t}\n\t\t\t\tfunction setButtonsLoading(form) {\n\t\t\t\t\tvar buttons = form.querySelectorAll('button[type=\"submit\"]');\n\t\t\t\t\tif (buttons.length === 0) {\n\t\t\t\t\t\tbuttons = form.querySelectorAll(\"button\");\n\t\t\t\t\t}\n\t\t\t\t\tbuttons.forEach(function (button) {\n\t\t\t\t\t\tbutton.disabled = true;\n\t\t\t\t\t\tbutton.setAttribute(\"aria-busy\", \"true\");\n\t\t\t\t\t\tvar original = button.textContent;\n\t\t\t\t\t\tbutton.setAttribute(\"data-original\", original || \"\");\n\t\t\t\t\t\tbutton.textContent = button.getAttribute(\"data-loading-text\") || \"Working...\";\n\t\t\t\t\t});\n\t\t\t\t\tform.dataset.loadingActive = \"true\";\n\t\t\t\t}\n\t\t\t\tfunction resetButtons(form) {\n\t\t\t\t\tif (form.dataset.loadingActive !== \"true\") return;\n\t\t\t\t\tvar buttons = form.querySelectorAll(\"button\");\n\t\t\t\t\tbuttons.forEach(function (button) {\n\t\t\t\t\t\tbutton.disabled = false;\n\t\t\t\t\t\tbutton.removeAttribute(\"aria-busy\");\n\t\t\t\t\t\tif (button.hasAttribute(\"data-original\")) {\n\t\t\t\t\t\t\tbutton.textContent = button.getAttribute(\"data-original\");\n\t\t\t\t\t\t\tbutton.removeAttribute(\"data-original\");\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\tform.dataset.loadingActive = \"false\";\n\t\t\t\t}\n\t\t\t\tfunction bindLoadingForms() {\n\t\t\t\t\tdocument.querySelectorAll(\"form\").forEach(function (form) {\n\t\t\t\t\t\tif (!shouldBind(form)) return;\n\t\t\t\t\t\tif (form.dataset.loadingBound === \"true\") return;\n\t\t\t\t\t\tform.dataset.loadingBound = \"true\";\n\t\t\t\t\t\tform.addEventListener(\"submit\", function (event) {\n\t\t\t\t\t\t\tclearInlineErrors(form);\n\t\t\t\t\t\t\tif (typeof form.checkValidity === \"function\" && !form.checkValidity()) {\n\t\t\t\t\t\t\t\tif (!form.hasAttribute(\"novalidate\")) {\n\t\t\t\t\t\t\t\t\tif (typeof form.reportValidity === \"function\") {\n\t\t\t\t\t\t\t\t\t\tform.reportValidity();\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tshowInlineErrors(form);\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tevent.preventDefault();\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tsetButtonsLoading(form);\n\t\t\t\t\t\t});\n\t\t\t\t\t\tif (hasInlineErrors(form)) {\n\t\t\t\t\t\t\tform.addEventListener(\"input\", function (event) {\n\t\t\t\t\t\t\t\tif (!event.target) return;\n\t\t\t\t\t\t\t\tclearFieldError(form, event.target);\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\tform.addEventListener(\"change\", function (event) {\n\t\t\t\t\t\t\t\tif (!event.target) return;\n\t\t\t\t\t\t\t\tclearFieldError(form, event.target);\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tif (document.readyState === \"loading\") {\n\t\t\t\t\tdocument.addEventListener(\"DOMContentLoaded\", bindLoadingForms);\n\t\t\t\t} else {\n\t\t\t\t\tbindLoadingForms();\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener(\"htmx:afterSwap\", bindLoadingForms);\n\t\t\t\tdocument.addEventListener(\"htmx:afterRequest\", function (event) {\n\t\t\t\t\tvar target = event.target;\n\t\t\t\t\tif (!target) return;\n\t\t\t\t\tvar form = target.tagName === \"FORM\" ? target : target.closest(\"form\");\n\t\t\t\t\tif (!form) return;\n\t\t\t\t\tresetButtons(form);\n\t\t\t\t});\n\t\t\t})();\n\t\t</script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<script>\n\t\t\t(function () {\n\t\t\t\tfunction shouldBind(form) {\n\t\t\t\t\tif (form.dataset.loading === \"false\") return false;\n\t\t\t\t\tvar method = (form.getAttribute(\"method\") || \"\").toUpperCase();\n\t\t\t\t\treturn method === \"POST\" || form.hasAttribute(\"hx-post\");\n\t\t\t\t}\n\t\t\t\tfunction hasInlineErrors(form) {\n\t\t\t\t\treturn form.hasAttribute(\"data-inline-errors\");\n\t\t\t\t}\n\t\t\t\tfunction errorKey(field) {\n\t\t\t\t\treturn field.getAttribute(\"name\") || field.getAttribute(\"id\") || \"\";\n\t\t\t\t}\n\t\t\t\tfunction clearFieldError(form, field) {\n\t\t\t\t\tif (!hasInlineErrors(form)) return;\n\t\t\t\t\tvar key = errorKey(field);\n\t\t\t\t\tif (!key) return;\n\t\t\t\t\tvar msg = form.querySelector('[data-error-for=\"' + key + '\"]');\n\t\t\t\t\tif (msg) {\n\t\t\t\t\t\tmsg.textContent = \"\";\n\t\t\t\t\t\tmsg.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t\tfield.removeAttribute(\"aria-invalid\");\n\t\t\t\t}\n\t\t\t\tfunction clearInlineErrors(form) {\n\t\t\t\t\tif (!hasInlineErrors(form)) return;\n\t\t\t\t\tform.querySelectorAll('[data-error-for]').forEach(function (msg) {\n\t\t\t\t\t\tmsg.textContent = \"\";\n\t\t\t\t\t\tmsg.classList.add(\"hidden\");\n\t\t\t\t\t});\n\t\t\t\t\tform.querySelectorAll('[aria-invalid=\"true\"]').forEach(function (field) {\n\t\t\t\t\t\tfield.removeAttribute(\"aria-invalid\");\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tfunction validationMessage(field) {\n\t\t\t\t\tif (field.validity && field.validity.valueMissing) {\n\t\t\t\t\t\treturn \"This field is required.\";\n\t\t\t\t\t}\n\t\t\t\t\tif (field.validity && field.validity.typeMismatch) {\n\t\t\t\t\t\tif (field.type === \"email\") return \"Please enter a valid email address.\";\n\t\t\t\t\t\treturn \"Please enter a valid value.\";\n\t\t\t\t\t}\n\t\t\t\t\treturn field.validationMessage || \"This field is invalid.\";\n\t\t\t\t}\n\t\t\t\tfunction showInlineErrors(form) {\n\t\t\t\t\tif (!hasInlineErrors(form)) return false;\n\t\t\t\t\tvar firstInvalid = null;\n\t\t\t\t\tArray.prototype.forEach.call(form.elements, function (field) {\n\t\t\t\t\t\tif (!field || !field.willValidate || field.disabled) return;\n\t\t\t\t\t\tif (field.checkValidity()) return;\n\t\t\t\t\t\tif (!firstInvalid) firstInvalid = field;\n\t\t\t\t\t\tfield.setAttribute(\"aria-invalid\", \"true\");\n\t\t\t\t\t\tvar key = errorKey(field);\n\t\t\t\t\t\tif (!key) return;\n\t\t\t\t\t\tvar msg = form.querySelector('[data-error-for=\"' + key + '\"]');\n\t\t\t\t\t\tif (msg) {\n\t\t\t\t\t\t\tmsg.textContent = validationMessage(field);\n\t\t\t\t\t\t\tmsg.classList.remove(\"hidden\");\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\tif (firstInvalid && typeof firstInvalid.focus === \"function\") {\n\t\t\t\t\t\tfirstInvalid.focus();\n\t\t\t\t\t}\n\t\t\t\t\treturn true;\n\t\t\t\t}\n\t\t\t\tfunction setButtonsLoading(form) {\n\t\t\t\t\tvar buttons = form.querySelectorAll('button[type=\"submit\"]');\n\t\t\t\t\tif (buttons.length === 0) {\n\t\t\t\t\t\tbuttons = form.querySelectorAll(\"button\");\n\t\t\t\t\t}\n\t\t\t\t\tbuttons.forEach(function (button) {\n\t\t\t\t\t\tbutton.disabled = true;\n\t\t\t\t\t\tbutton.setAttribute(\"aria-busy\", \"true\");\n\t\t\t\t\t\tvar original = button.textContent;\n\t\t\t\t\t\tbutton.setAttribute(\"data-original\", original || \"\");\n\t\t\t\t\t\tbutton.textContent = button.getAttribute(\"data-loading-text\") || \"Working...\";\n\t\t\t\t\t});\n\t\t\t\t\tform.dataset.loadingActive = \"true\";\n\t\t\t\t}\n\t\t\t\tfunction resetButtons(form) {\n\t\t\t\t\tif (form.dataset.loadingActive !== \"true\") return;\n\t\t\t\t\tvar buttons = form.querySelectorAll(\"button\");\n\t\t\t\t\tbuttons.forEach(function (button) {\n\t\t\t\t\t\tbutton.disabled = false;\n\t\t\t\t\t\tbutton.removeAttribute(\"aria-busy\");\n\t\t\t\t\t\tif (button.hasAttribute(\"data-original\")) {\n\t\t\t\t\t\t\tbutton.textContent = button.getAttribute(\"data-original\");\n\t\t\t\t\t\t\tbutton.removeAttribute(\"data-original\");\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\tform.dataset.loadingActive = \"false\";\n\t\t\t\t}\n\t\t\t\tfunction bindLoadingForms() {\n\t\t\t\t\tdocument.querySelectorAll(\"form\").forEach(function (form) {\n\t\t\t\t\t\tif (!shouldBind(form)) return;\n\t\t\t\t\t\tif (form.dataset.loadingBound === \"true\") return;\n\t\t\t\t\t\tform.dataset.loadingBound = \"true\";\n\t\t\t\t\t\tform.addEventListener(\"submit\", function (event) {\n\t\t\t\t\t\t\tclearInlineErrors(form);\n\t\t\t\t\t\t\tif (typeof form.checkValidity === \"function\" && !form.checkValidity()) {\n\t\t\t\t\t\t\t\tif (!form.hasAttribute(\"novalidate\")) {\n\t\t\t\t\t\t\t\t\tif (typeof form.reportValidity === \"function\") {\n\t\t\t\t\t\t\t\t\t\tform.reportValidity();\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tshowInlineErrors(form);\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tevent.preventDefault();\n\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tsetButtonsLoading(form);\n\t\t\t\t\t\t});\n\t\t\t\t\t\tif (hasInlineErrors(form)) {\n\t\t\t\t\t\t\tform.addEventListener(\"input\", function (event) {\n\t\t\t\t\t\t\t\tif (!event.target) return;\n\t\t\t\t\t\t\t\tclearFieldError(form, event.target);\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t\tform.addEventListener(\"change\", function (event) {\n\t\t\t\t\t\t\t\tif (!event.target) return;\n\t\t\t\t\t\t\t\tclearFieldError(form, event.target);\n\t\t\t\t\t\t\t});\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tif (document.readyState === \"loading\") {\n\t\t\t\t\tdocument.addEventListener(\"DOMContentLoaded\", bindLoadingForms);\n\t\t\t\t} else {\n\t\t\t\t\tbindLoadingForms();\n\t\t\t\t}\n\t\t\t\tdocument.addEventListener(\"htmx:afterSwap\", bindLoadingForms);\n\t\t\t\tdocument.addEventListener(\"htmx:afterRequest\", function (event) {\n\t\t\t\t\tvar target = event.target;\n\t\t\t\t\tif (!target) return;\n\t\t\t\t\tvar form = target.tagName === \"FORM\" ? target : target.closest(\"form\");\n\t\t\t\t\tif (!form) return;\n\t\t\t\t\tresetButtons(form);\n\t\t\t\t});\n\t\t\t})();\n\t\t</script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -394,12 +413,12 @@ func NotFoundPage() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var15 == nil {
-			templ_7745c5c3_Var15 = templ.NopComponent
+		templ_7745c5c3_Var17 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var17 == nil {
+			templ_7745c5c3_Var17 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var16 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var18 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -411,11 +430,11 @@ func NotFoundPage() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<div class=\"mx-auto max-w-lg rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm\"><h1 class=\"text-4xl font-semibold\">404</h1><p class=\"mt-2 text-muted-foreground\">We could not find that page.</p><div class=\"mt-6 flex justify-center\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div class=\"mx-auto max-w-lg rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm\"><h1 class=\"text-4xl font-semibold\">404</h1><p class=\"mt-2 text-muted-foreground\">We could not find that page.</p><div class=\"mt-6 flex justify-center\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var17 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var19 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -427,23 +446,23 @@ func NotFoundPage() templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "Go Home")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "Go Home")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = button.Button(button.Props{Variant: button.VariantDefault, Href: "/"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var17), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = button.Button(button.Props{Variant: button.VariantDefault, Href: "/"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var19), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout(LayoutProps{Title: "Page Not Found", ShowNav: false}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var16), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout(LayoutProps{Title: "Page Not Found", ShowNav: false}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var18), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

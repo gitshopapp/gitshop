@@ -1,0 +1,173 @@
+package views
+
+templ TermsPage() {
+	@Layout(LayoutProps{
+		Title:        "Terms of Service",
+		Subtitle:     "Rules for using GitShop.",
+		ShowNav:      false,
+		CenterHeader: true,
+	}) {
+		<div class="mx-auto max-w-3xl space-y-8 text-sm leading-7 text-foreground [&_ul]:list-disc [&_ul]:list-outside [&_ul]:space-y-1 [&_ul]:pl-6 [&_li]:pl-1">
+			<section class="space-y-3">
+				<p class="font-medium text-foreground">Last updated: February 13, 2026</p>
+				<p>
+					These Terms of Service govern your use of GitShop. By using GitShop, you agree to these terms.
+					If you do not agree, do not use GitShop.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">What GitShop Does</h2>
+				<p>
+					GitShop helps you run storefronts through GitHub repositories. Customers place orders through GitHub
+					issues, and checkout is processed through Stripe.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Accounts and Integrations</h2>
+				<p>To use GitShop, you may need accounts with third-party services, including GitHub and Stripe.</p>
+				<p>
+					Your use of those services is governed by their own terms and policies. You are responsible for
+					maintaining access to your accounts and keeping credentials secure.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Seller Responsibilities</h2>
+				<p>If you use GitShop to sell products, you are responsible for:</p>
+				<ul class="list-disc space-y-2 pl-5">
+					<li>accurate product listings, pricing, and shipping details in your repository configuration;</li>
+					<li>fulfillment, shipping, support, and any obligations to your customers;</li>
+					<li>compliance with applicable laws, taxes, and consumer protection rules.</li>
+				</ul>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Prohibited Use</h2>
+				<p>You may not use GitShop to:</p>
+				<ul class="list-disc space-y-2 pl-5">
+					<li>violate laws or regulations;</li>
+					<li>sell prohibited or unsafe products;</li>
+					<li>interfere with, abuse, or disrupt the service.</li>
+				</ul>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Fees and Payments</h2>
+				<p>Payments are processed by Stripe. GitShop does not store full payment card numbers. You are responsible for your Stripe fees, chargebacks, and disputes related to your sales.</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Service Availability</h2>
+				<p>
+					GitShop is provided on an "as is" and "as available" basis. We may update, suspend, or discontinue parts
+					of the service at any time.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Limitation of Liability</h2>
+				<p>
+					To the fullest extent permitted by law, GitShop is not liable for indirect, incidental, special, or
+					consequential damages, or for lost profits, revenue, data, or goodwill.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Changes to These Terms</h2>
+				<p>
+					We may update these Terms of Service from time to time. Continued use of GitShop after updates means you
+					accept the revised terms.
+				</p>
+			</section>
+		</div>
+	}
+}
+
+templ PrivacyPolicyPage() {
+	@Layout(LayoutProps{
+		Title:        "Privacy Policy",
+		Subtitle:     "How GitShop collects and uses data.",
+		ShowNav:      false,
+		CenterHeader: true,
+	}) {
+		<div class="mx-auto max-w-3xl space-y-8 text-sm leading-7 text-foreground [&_ul]:list-disc [&_ul]:list-outside [&_ul]:space-y-1 [&_ul]:pl-6 [&_li]:pl-1">
+			<section class="space-y-3">
+				<p class="font-medium text-foreground">Last updated: February 13, 2026</p>
+				<p>
+					This Privacy Policy explains how GitShop handles personal information when you use the service.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Information We Collect</h2>
+				<p>Depending on how GitShop is used, we may process:</p>
+				<ul class="list-disc space-y-2 pl-5">
+					<li>GitHub account and repository metadata needed to connect and operate storefronts;</li>
+					<li>order information submitted through GitHub issues and templates;</li>
+					<li>checkout and payment status details from Stripe;</li>
+					<li>configuration details for storefront setup, shipping, and notifications.</li>
+				</ul>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">How We Use Information</h2>
+				<p>We use information to:</p>
+				<ul class="list-disc space-y-2 pl-5">
+					<li>authenticate users and manage storefront setup;</li>
+					<li>create and track orders;</li>
+					<li>process checkout and payment events;</li>
+					<li>send fulfillment or order-related notifications;</li>
+					<li>improve service reliability and security.</li>
+				</ul>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Third-Party Services</h2>
+				<p>
+					GitShop relies on GitHub and Stripe to provide core functionality. Email notifications may be sent through
+					configured email providers. These services have their own privacy practices and terms.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Payment Data</h2>
+				<p>
+					Payments are handled by Stripe. GitShop does not store full payment card numbers or CVV values.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Data Retention</h2>
+				<p>
+					We retain data for as long as needed to operate the service, meet legal obligations, resolve disputes, and
+					enforce agreements.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Security</h2>
+				<p>
+					We use reasonable safeguards to protect data, including secure transport and access controls. No method of
+					storage or transmission is completely secure.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Cookies and Sessions</h2>
+				<p>
+					GitShop uses session cookies to keep users signed in and maintain secure application sessions.
+				</p>
+			</section>
+
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold tracking-tight">Changes to This Policy</h2>
+				<p>
+					We may update this Privacy Policy from time to time. Continued use of GitShop after updates means you
+					accept the revised policy.
+				</p>
+			</section>
+		</div>
+	}
+}

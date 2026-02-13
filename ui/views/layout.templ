@@ -16,6 +16,7 @@ type LayoutProps struct {
 	ActiveRoute string
 	ShowNav     bool
 	HideHeader  bool
+	CenterHeader bool
 	ShowSetupNav bool
 	ShopSwitcher *ShopSwitcherProps
 }
@@ -100,7 +101,7 @@ templ Layout(props LayoutProps, children ...templ.Component) {
 
 				<main class="mx-auto max-w-6xl px-4 py-10">
 					if !props.HideHeader && props.Title != "" {
-						<div class="mb-8">
+						<div class={ utils.TwMerge("mb-8", utils.If(props.CenterHeader, "text-center")) }>
 							<h1 class="text-3xl font-semibold tracking-tight">{ props.Title }</h1>
 							if props.Subtitle != "" {
 								<p class="mt-2 text-muted-foreground">{ props.Subtitle }</p>
@@ -109,8 +110,15 @@ templ Layout(props LayoutProps, children ...templ.Component) {
 					}
 					{ children... }
 				</main>
-		</div>
-		<div id="toast-root"></div>
+				<footer class="bg-background/90">
+					<div class="mx-auto flex max-w-6xl items-center justify-center gap-4 px-4 py-6 text-sm text-muted-foreground">
+						<a href="/" class="transition-colors hover:text-foreground">Home</a>
+						<a href="/terms" class="transition-colors hover:text-foreground">Terms of Service</a>
+						<a href="/privacy" class="transition-colors hover:text-foreground">Privacy Policy</a>
+					</div>
+				</footer>
+			</div>
+			<div id="toast-root"></div>
 
 		<script defer nonce={ templ.GetNonce(ctx) } src="https://unpkg.com/htmx.org@1.9.12"></script>
 		@input.Script()
