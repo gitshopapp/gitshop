@@ -151,14 +151,7 @@ func (h *Handlers) RequireAuth(next http.Handler) http.Handler {
 }
 
 func (h *Handlers) Root(w http.ResponseWriter, r *http.Request) {
-	contextResult := h.ResolveAdminContext(r.Context(), r, AdminContextRequirements{
-		Route: "root",
-	})
-	if h.WriteAdminContextDecision(w, r, contextResult) {
-		return
-	}
-
-	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+	h.Landing(w, r)
 }
 
 func (h *Handlers) loggerFromContext(ctx context.Context) *slog.Logger {

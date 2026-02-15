@@ -1,0 +1,90 @@
+package views
+
+import (
+	"github.com/gitshopapp/gitshop/ui/components/button"
+	"github.com/gitshopapp/gitshop/ui/components/card"
+)
+
+type LandingPageProps struct {
+	GitHubAppURL string
+}
+
+templ LandingPage(props LandingPageProps) {
+	@Layout(LayoutProps{ShowNav: false, HideHeader: true}) {
+		<div class="space-y-10 md:space-y-12">
+			<section class="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-background via-secondary/35 to-emerald-100/45 p-8 md:p-12">
+				<div class="mx-auto flex max-w-3xl flex-col items-center text-center">
+					<img src={ templ.SafeURL("/assets/img/gitshop-logo.png") } alt="GitShop logo" class="h-auto w-32"/>
+					<h1 class="mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">
+						Turn any GitHub repository into a storefront.
+					</h1>
+					<p class="mt-4 max-w-2xl text-base text-muted-foreground sm:text-lg">
+						GitShop lets customers place orders through GitHub Issues, pay with Stripe Checkout, and lets you run setup and fulfillment from one admin dashboard.
+					</p>
+					<div class="mt-6 flex flex-wrap items-center justify-center gap-3">
+						@button.Button(button.Props{
+							Variant: button.VariantDefault,
+							Href:    props.GitHubAppURL,
+							Target:  "_blank",
+							Attributes: templ.Attributes{
+								"rel": "noopener noreferrer",
+							},
+						}) {
+							Install GitHub App
+						}
+						@button.Button(button.Props{
+							Variant: button.VariantOutline,
+							Href:    "/admin/login",
+						}) {
+							Sign in to GitShop
+						}
+					</div>
+					<p class="mt-4 text-sm text-muted-foreground">
+						Want more details?
+						<a href="https://github.com/gitshopapp/gitshop" target="_blank" rel="noopener noreferrer" class="font-medium text-foreground underline-offset-4 transition-colors hover:underline">View GitShop on GitHub</a>.
+					</p>
+				</div>
+			</section>
+
+			<section class="mx-auto max-w-3xl space-y-4">
+				<div class="space-y-2">
+					<h2 class="text-2xl font-semibold tracking-tight">How it works</h2>
+					<p class="text-muted-foreground">Install once, configure once, then process orders directly from your repo workflow.</p>
+				</div>
+				@card.Card() {
+					@card.Content(card.ContentProps{Class: "pt-6"}) {
+						<ol class="space-y-4 text-sm text-muted-foreground">
+							<li><span class="font-medium text-foreground">1.</span> Install the GitShop GitHub App on your repository.</li>
+							<li><span class="font-medium text-foreground">2.</span> Sign in to GitShop and choose your shop.</li>
+							<li><span class="font-medium text-foreground">3.</span> Complete setup (labels, <code>gitshop.yaml</code>, order template, Stripe).</li>
+							<li><span class="font-medium text-foreground">4.</span> Customers place orders via issues and pay through Stripe Checkout.</li>
+						</ol>
+					}
+				}
+			</section>
+
+			<section class="rounded-2xl border border-border/60 bg-background p-6 text-center shadow-xs md:p-8">
+				<h2 class="text-2xl font-semibold tracking-tight">Ready to install?</h2>
+				<p class="mt-2 text-muted-foreground">Install GitShop, complete setup, and start taking orders from your repository.</p>
+				<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+					@button.Button(button.Props{
+						Variant: button.VariantDefault,
+						Href:    props.GitHubAppURL,
+						Target:  "_blank",
+						Attributes: templ.Attributes{
+							"rel": "noopener noreferrer",
+						},
+					}) {
+						Install GitHub App
+					}
+					@button.Button(button.Props{
+						Variant: button.VariantOutline,
+						Href:    "/admin/login",
+					}) {
+						Sign in
+					}
+				</div>
+			</section>
+		</div>
+	}
+}

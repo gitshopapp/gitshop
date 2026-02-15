@@ -29,19 +29,22 @@ GitShop is for creators and teams who want a lightweight, GitHub-native way to s
 
 ## Quick Start 🚀
 
-1. Install the [GitShop GitHub App](https://github.com/apps/gitshopapp) on your repository.
-2. Sign in to [GitShop](http://gitshop.app) with GitHub.
-3. Select your repository/shop.
-4. Complete the setup checklist in the dashboard.
+1. Choose your storefront repository. You can turn any GitHub repo into a shop, but the most straightforward setup is a dedicated repo for selling.
+2. In that repo, use `README.md` as your storefront page with shop details, product information, and photos.
+3. Install the [GitShop GitHub App](https://github.com/apps/gitshopapp) on your repository.
+4. Sign in to [GitShop](http://gitshop.app) with GitHub.
+5. Select your repository/shop.
+6. Complete the setup checklist in the dashboard.
 
 ## How It Works 🔄
 
 1. Define your catalog in `gitshop.yaml`.
-2. Create an issue template in `.github/ISSUE_TEMPLATE/*.yaml` with the marker `# gitshop:order-template` and label `gitshop:order`.
-3. A customer opens an issue from that order template.
-4. GitShop validates the order and posts a Stripe Checkout link.
-5. After payment, GitShop updates order labels and removes the checkout-link comment.
-6. You manage shipping and delivery from the admin dashboard.
+2. Document your products in the repo `README.md` (descriptions, pricing context, photos, and your order link).
+3. Create an issue template in `.github/ISSUE_TEMPLATE/*.yaml` with the marker `# gitshop:order-template` and label `gitshop:order`.
+4. A customer discovers products in your `README.md`, then opens your repo's **New issue** page (or a direct `issues/new?template=...` link) and submits the order template.
+5. GitShop validates the order and posts a Stripe Checkout link.
+6. After payment, GitShop updates order labels and removes the checkout-link comment.
+7. You manage shipping and delivery from the admin dashboard.
 
 ## `gitshop.yaml` Example 🧾
 

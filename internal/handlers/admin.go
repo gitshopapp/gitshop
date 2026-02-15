@@ -303,8 +303,6 @@ func (h *Handlers) AdminDashboardOrders(w http.ResponseWriter, r *http.Request) 
 	}
 	shop := contextResult.Shop
 
-	h.loggerFromContext(ctx).Error("test is a test odannyc")
-
 	orders, err := h.adminService.GetRecentOrders(ctx, shop.ID, 20)
 	if err != nil {
 		h.loggerFromContext(ctx).Error("failed to get orders", "error", err, "shop_id", shop.ID)
