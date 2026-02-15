@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
+
 	"github.com/gitshopapp/gitshop/internal/db"
 	"github.com/gitshopapp/gitshop/internal/githubapp"
 	"github.com/gitshopapp/gitshop/internal/logging"
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 type InstallationService struct {
@@ -46,7 +50,34 @@ func (s *InstallationService) loggerFromContext(ctx context.Context) *slog.Logge
 	return logging.FromContext(ctx, s.logger)
 }
 
-func (s *InstallationService) HandleInstallationEvent(ctx context.Context, event InstallationEventInput) error {
+func (s *InstallationService) HandleInstallationEvent(ctx context.Context, event InstallationEventInput) (err error) {
+	span := sentry.StartSpan(
+		ctx,
+		"service.installation.handle_installation_event",
+		sentry.WithOpName("service.installation"),
+		sentry.WithDescription("HandleInstallationEvent"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
+	meter := observability.MeterFromContext(ctx)
+	meter.SetAttributes(
+		attribute.String("event", "installation"),
+		attribute.String("action", event.Action),
+	)
+	meter.Count("installation.event.received", 1)
+	span.SetData("github.installation_id", event.InstallationID)
+	defer func() {
+		if err != nil {
+			meter.Count("installation.event.failed", 1)
+			span.Status = sentry.SpanStatusInternalError
+			return
+		}
+		meter.Count("installation.event.processed", 1)
+		span.Status = sentry.SpanStatusOK
+	}()
+
 	logger := s.loggerFromContext(ctx)
 
 	switch event.Action {
@@ -174,7 +205,34 @@ func (s *InstallationService) HandleInstallationEvent(ctx context.Context, event
 	return nil
 }
 
-func (s *InstallationService) HandleInstallationRepositoriesEvent(ctx context.Context, event InstallationRepositoriesEventInput) error {
+func (s *InstallationService) HandleInstallationRepositoriesEvent(ctx context.Context, event InstallationRepositoriesEventInput) (err error) {
+	span := sentry.StartSpan(
+		ctx,
+		"service.installation.handle_installation_repositories_event",
+		sentry.WithOpName("service.installation"),
+		sentry.WithDescription("HandleInstallationRepositoriesEvent"),
+		sentry.WithSpanOrigin(sentry.SpanOriginManual),
+	)
+	defer span.Finish()
+	ctx = span.Context()
+
+	meter := observability.MeterFromContext(ctx)
+	meter.SetAttributes(
+		attribute.String("event", "installation_repositories"),
+		attribute.String("action", event.Action),
+	)
+	meter.Count("installation.event.received", 1)
+	span.SetData("github.installation_id", event.InstallationID)
+	defer func() {
+		if err != nil {
+			meter.Count("installation.event.failed", 1)
+			span.Status = sentry.SpanStatusInternalError
+			return
+		}
+		meter.Count("installation.event.processed", 1)
+		span.Status = sentry.SpanStatusOK
+	}()
+
 	logger := s.loggerFromContext(ctx)
 
 	installationID := event.InstallationID

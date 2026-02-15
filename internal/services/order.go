@@ -18,6 +18,7 @@ import (
 	"github.com/gitshopapp/gitshop/internal/db"
 	"github.com/gitshopapp/gitshop/internal/githubapp"
 	"github.com/gitshopapp/gitshop/internal/logging"
+	"github.com/gitshopapp/gitshop/internal/observability"
 	"github.com/gitshopapp/gitshop/internal/stripe"
 )
 
@@ -100,15 +101,14 @@ func (s *OrderService) HandleIssueOpened(ctx context.Context, input IssueOpenedI
 	ctx = span.Context()
 
 	logger := s.loggerFromContext(ctx)
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
-	baseAttrs := []attribute.Builder{attribute.String("source", "issue_opened")}
+	meter := observability.MeterFromContext(ctx)
+	meter.SetAttributes(attribute.String("source", "issue_opened"))
 	recordFailure := func(reason string) {
 		meter.Count("order.intake.failed", 1, sentry.WithAttributes(
-			attribute.String("source", "issue_opened"),
 			attribute.String("reason", reason),
 		))
 	}
-	meter.Count("order.intake.received", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("order.intake.received", 1)
 
 	githubClient := s.githubClient.WithInstallation(input.InstallationID)
 
@@ -245,7 +245,7 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 		recordFailure("order_create_failed")
 		return fmt.Errorf("failed to create order: %w", createErr)
 	}
-	meter.Count("order.created", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("order.created", 1)
 
 	quantity := int64(orderQuantity(orderData.Options))
 	checkoutParams := stripe.CheckoutSessionParams{
@@ -268,7 +268,6 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 	if err != nil {
 		recordFailure("checkout_create_failed")
 		meter.Count("checkout.session.failed", 1, sentry.WithAttributes(
-			attribute.String("source", "issue_opened"),
 			attribute.String("reason", "create_failed"),
 		))
 		if markErr := s.orderStore.MarkFailed(ctx, order.ID, "stripe_checkout_failed"); markErr != nil {
@@ -298,7 +297,7 @@ Need help? Check our [documentation](https://github.com/%s/blob/main/README.md) 
 		recordFailure("label_add_failed")
 		return fmt.Errorf("failed to add label: %w", err)
 	}
-	meter.Count("checkout.session.created", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("checkout.session.created", 1)
 
 	return nil
 }
@@ -314,7 +313,7 @@ func (s *OrderService) HandleIssueCommentCreated(ctx context.Context, input Issu
 	defer span.Finish()
 	ctx = span.Context()
 
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	commentBody := strings.TrimSpace(input.CommentBody)
 	if commentBody != ".gitshop retry" {
 		return nil
@@ -378,7 +377,7 @@ func (s *OrderService) handleRetryCommand(ctx context.Context, client *githubapp
 	defer span.Finish()
 	ctx = span.Context()
 
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	if order == nil || shop == nil {
 		meter.Count("order.retry.rejected", 1, sentry.WithAttributes(
 			attribute.String("reason", "order_not_found"),

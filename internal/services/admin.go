@@ -17,6 +17,7 @@ import (
 	"github.com/gitshopapp/gitshop/internal/email"
 	"github.com/gitshopapp/gitshop/internal/githubapp"
 	"github.com/gitshopapp/gitshop/internal/logging"
+	"github.com/gitshopapp/gitshop/internal/observability"
 	"github.com/gitshopapp/gitshop/internal/stripe"
 )
 
@@ -310,7 +311,7 @@ func (s *AdminService) ShipOrder(ctx context.Context, input ShipOrderInput) erro
 	ctx = span.Context()
 
 	logger := s.loggerFromContext(ctx)
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	meter.Count("fulfillment.shipment.received", 1)
 	recordFailed := func(reason string) {
 		meter.Count("fulfillment.shipment.failed", 1, sentry.WithAttributes(

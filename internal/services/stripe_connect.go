@@ -18,6 +18,7 @@ import (
 	"github.com/gitshopapp/gitshop/internal/cache"
 	"github.com/gitshopapp/gitshop/internal/db"
 	"github.com/gitshopapp/gitshop/internal/logging"
+	"github.com/gitshopapp/gitshop/internal/observability"
 	"github.com/gitshopapp/gitshop/internal/stripe"
 )
 
@@ -83,7 +84,7 @@ func (s *StripeConnectService) StartOnboarding(ctx context.Context, shopID uuid.
 	defer span.Finish()
 	ctx = span.Context()
 
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	action := "start"
 	recordFailed := func(reason string) {
 		meter.Count("stripe.connect.onboarding.failed", 1, sentry.WithAttributes(
@@ -171,7 +172,7 @@ func (s *StripeConnectService) CompleteOnboarding(ctx context.Context, state str
 	ctx = span.Context()
 
 	result := CompleteOnboardingResult{}
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	action := "complete"
 	recordFailed := func(reason string) {
 		meter.Count("stripe.connect.onboarding.failed", 1, sentry.WithAttributes(
@@ -319,7 +320,7 @@ func (s *StripeConnectService) ReconnectOnboarding(ctx context.Context, shopID u
 	defer span.Finish()
 	ctx = span.Context()
 
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	action := "reconnect"
 	recordFailed := func(reason string) {
 		meter.Count("stripe.connect.onboarding.failed", 1, sentry.WithAttributes(
@@ -394,7 +395,7 @@ func (s *StripeConnectService) Disconnect(ctx context.Context, shopID uuid.UUID)
 	defer span.Finish()
 	ctx = span.Context()
 
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	meter.Count("stripe.connect.disconnect.received", 1)
 	recordFailed := func(reason string) {
 		meter.Count("stripe.connect.disconnect.failed", 1, sentry.WithAttributes(

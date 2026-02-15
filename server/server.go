@@ -89,6 +89,7 @@ func (s *Server) buildRouter() *mux.Router {
 	h := s.handlers
 
 	r := mux.NewRouter()
+	r.Use(h.MetricsContext)
 	r.Use(h.RequestLogger)
 	r.Use(h.SecurityHeaders)
 	r.HandleFunc("/", h.Root).Methods("GET").Name("root")

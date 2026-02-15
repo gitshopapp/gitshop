@@ -9,12 +9,13 @@ import (
 
 	"github.com/gitshopapp/gitshop/internal/cache"
 	"github.com/gitshopapp/gitshop/internal/githubapp"
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 func (h *Handlers) GitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := h.loggerFromContext(ctx)
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
+	meter := observability.MeterFromContext(ctx)
 	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes)
 
 	payload, err := githubapp.ReadWebhookPayload(r, h.config.GitHubWebhookSecret)

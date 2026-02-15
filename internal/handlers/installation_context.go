@@ -8,9 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/uuid"
 
 	"github.com/gitshopapp/gitshop/internal/db"
+	"github.com/gitshopapp/gitshop/internal/observability"
 	"github.com/gitshopapp/gitshop/internal/services"
 	"github.com/gitshopapp/gitshop/internal/session"
 )
@@ -51,6 +54,23 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 	if ctx == nil {
 		ctx = r.Context()
 	}
+	meter := observability.MeterFromContext(ctx)
+	route := strings.TrimSpace(req.Route)
+	if route == "" {
+		route = "unknown"
+	}
+	meter.SetAttributes(
+		attribute.String("component", "admin.context"),
+		attribute.String("admin.route", route),
+	)
+	meter.Count("admin.context.evaluated", 1)
+	recordDecision := func(decision AdminContextDecision, reason string) {
+		attrs := []attribute.Builder{attribute.String("decision", string(decision))}
+		if reason != "" {
+			attrs = append(attrs, attribute.String("reason", reason))
+		}
+		meter.Count("admin.context.decision", 1, sentry.WithAttributes(attrs...))
+	}
 
 	sess := session.GetSessionFromContext(ctx)
 	if sess == nil && h.sessionManager != nil {
@@ -61,8 +81,10 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 	}
 	if sess == nil {
 		if req.AllowAnonymous {
+			recordDecision(AdminContextDecisionAllow, "anonymous_allowed")
 			return result
 		}
+		recordDecision(AdminContextDecisionRedirect, "missing_session")
 		return AdminContextResult{
 			Decision:    AdminContextDecisionRedirect,
 			RedirectURL: "/admin/login",
@@ -75,6 +97,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 		if rawInstallationID != "" {
 			requestedInstallationID, err := parseInstallationID(rawInstallationID)
 			if err != nil {
+				recordDecision(AdminContextDecisionBadRequest, "invalid_installation_id")
 				return AdminContextResult{
 					Decision:   AdminContextDecisionBadRequest,
 					StatusCode: http.StatusBadRequest,
@@ -83,6 +106,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 				}
 			}
 			if requestedInstallationID != sess.InstallationID {
+				recordDecision(AdminContextDecisionRedirect, "installation_override")
 				return AdminContextResult{
 					Decision:    AdminContextDecisionRedirect,
 					RedirectURL: oauthLoginRedirectURL(requestedInstallationID),
@@ -94,6 +118,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 
 	if sess.InstallationID < 0 {
 		h.loggerFromContext(ctx).Info("session has no installation context", "route", req.Route, "username", sess.GitHubUsername)
+		recordDecision(AdminContextDecisionRedirect, "no_installation_context")
 		return AdminContextResult{
 			Decision:    AdminContextDecisionRedirect,
 			RedirectURL: "/admin/no-installations",
@@ -103,6 +128,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 
 	if sess.InstallationID == 0 {
 		h.loggerFromContext(ctx).Info("installation id in session is 0", "route", req.Route, "username", sess.GitHubUsername)
+		recordDecision(AdminContextDecisionRedirect, "installation_id_zero")
 		return AdminContextResult{
 			Decision:    AdminContextDecisionRedirect,
 			RedirectURL: oauthLoginRedirectURL(0),
@@ -111,11 +137,13 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 	}
 
 	if !req.RequireShop {
+		recordDecision(AdminContextDecisionAllow, "shop_not_required")
 		return result
 	}
 
 	missingShopRedirectURL := adminMissingShopRedirectURL(req)
 	if sess.ShopID == uuid.Nil {
+		recordDecision(AdminContextDecisionRedirect, "missing_shop")
 		return AdminContextResult{
 			Decision:    AdminContextDecisionRedirect,
 			RedirectURL: missingShopRedirectURL,
@@ -123,6 +151,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 	}
 
 	if h.adminService == nil {
+		recordDecision(AdminContextDecisionInternalError, "admin_service_unavailable")
 		return AdminContextResult{
 			Decision:   AdminContextDecisionInternalError,
 			StatusCode: http.StatusInternalServerError,
@@ -134,6 +163,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 	if err != nil {
 		if !errors.Is(err, services.ErrAdminShopNotFound) {
 			h.loggerFromContext(ctx).Error("failed to load shop for admin context", "error", err, "route", req.Route, "shop_id", sess.ShopID, "installation_id", sess.InstallationID)
+			recordDecision(AdminContextDecisionInternalError, "shop_lookup_failed")
 			return AdminContextResult{
 				Decision:   AdminContextDecisionInternalError,
 				StatusCode: http.StatusInternalServerError,
@@ -143,6 +173,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 
 		h.loggerFromContext(ctx).Warn("active shop is no longer available for installation", "error", err, "route", req.Route, "shop_id", sess.ShopID, "installation_id", sess.InstallationID)
 		if clearErr := h.clearUnavailableShopFromSession(ctx, r, sess, req.Route); clearErr != nil {
+			recordDecision(AdminContextDecisionInternalError, "clear_unavailable_shop_failed")
 			return AdminContextResult{
 				Decision:   AdminContextDecisionInternalError,
 				StatusCode: http.StatusInternalServerError,
@@ -151,6 +182,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 		}
 
 		result.Session = sess
+		recordDecision(AdminContextDecisionRedirect, "shop_not_found")
 		return AdminContextResult{
 			Decision:    AdminContextDecisionRedirect,
 			RedirectURL: missingShopRedirectURL,
@@ -161,6 +193,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 	if !shop.IsConnected() {
 		redirectURL, clearErr := h.clearStaleInstallationContext(ctx, r, sess, req.Route)
 		if clearErr != nil {
+			recordDecision(AdminContextDecisionInternalError, "clear_stale_installation_failed")
 			return AdminContextResult{
 				Decision:   AdminContextDecisionInternalError,
 				StatusCode: http.StatusInternalServerError,
@@ -168,6 +201,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 			}
 		}
 
+		recordDecision(AdminContextDecisionRedirect, "shop_disconnected")
 		return AdminContextResult{
 			Decision:    AdminContextDecisionRedirect,
 			RedirectURL: redirectURL,
@@ -179,6 +213,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 	if req.RequireOnboardingComplete {
 		if !h.adminService.IsOnboarded(shop) {
 			if !h.adminService.IsOnboardingComplete(ctx, shop) {
+				recordDecision(AdminContextDecisionRedirect, "onboarding_incomplete")
 				return AdminContextResult{
 					Decision:    AdminContextDecisionRedirect,
 					RedirectURL: "/admin/setup",
@@ -189,6 +224,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 
 			if err := h.adminService.MarkOnboarded(ctx, shop); err != nil {
 				h.loggerFromContext(ctx).Error("failed to mark shop as onboarded", "error", err, "route", req.Route, "shop_id", shop.ID)
+				recordDecision(AdminContextDecisionInternalError, "mark_onboarded_failed")
 				return AdminContextResult{
 					Decision:   AdminContextDecisionInternalError,
 					StatusCode: http.StatusInternalServerError,
@@ -199,6 +235,7 @@ func (h *Handlers) ResolveAdminContext(ctx context.Context, r *http.Request, req
 		}
 	}
 
+	recordDecision(AdminContextDecisionAllow, "ok")
 	return result
 }
 

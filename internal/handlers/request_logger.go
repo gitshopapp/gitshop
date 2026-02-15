@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/gitshopapp/gitshop/internal/logging"
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 type loggingResponseWriter struct {
@@ -65,6 +66,20 @@ func (h *Handlers) RequestLogger(next http.Handler) http.Handler {
 		if r.ContentLength >= 0 {
 			logger = logger.With("content_length", r.ContentLength)
 		}
+		if sess := h.sessionFromRequest(r.Context(), r); sess != nil {
+			if sess.UserID > 0 {
+				logger = logger.With("user_id", sess.UserID)
+			}
+			if username := strings.TrimSpace(sess.GitHubUsername); username != "" {
+				logger = logger.With("github_username", username)
+			}
+			if sess.InstallationID != 0 {
+				logger = logger.With("installation_id", sess.InstallationID)
+			}
+			if sess.ShopID != uuid.Nil {
+				logger = logger.With("shop_id", sess.ShopID.String())
+			}
+		}
 
 		ctx := logging.WithLogger(r.Context(), logger)
 		r = r.WithContext(ctx)
@@ -80,6 +95,9 @@ func (h *Handlers) RequestLogger(next http.Handler) http.Handler {
 
 		metricRoute := route
 		if metricRoute == "" {
+			metricRoute = routeLabel(r)
+		}
+		if metricRoute == "" {
 			metricRoute = "unknown"
 		}
 		metricAttrs := []attribute.Builder{
@@ -87,7 +105,7 @@ func (h *Handlers) RequestLogger(next http.Handler) http.Handler {
 			attribute.String("http.route", metricRoute),
 			attribute.Int("http.status_code", status),
 		}
-		meter := sentry.NewMeter(ctx).WithCtx(ctx)
+		meter := observability.MeterFromContext(ctx)
 		meter.Count("http.server.requests", 1, sentry.WithAttributes(metricAttrs...))
 		meter.Distribution(
 			"http.server.duration",

@@ -18,6 +18,7 @@ import (
 	"github.com/gitshopapp/gitshop/internal/db"
 	"github.com/gitshopapp/gitshop/internal/githubapp"
 	"github.com/gitshopapp/gitshop/internal/logging"
+	"github.com/gitshopapp/gitshop/internal/observability"
 )
 
 type StripeService struct {
@@ -65,15 +66,14 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 	ctx = span.Context()
 
 	logger := s.loggerFromContext(ctx)
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
-	baseAttrs := []attribute.Builder{attribute.String("event", "checkout.session.completed")}
+	meter := observability.MeterFromContext(ctx)
+	meter.SetAttributes(attribute.String("event", "checkout.session.completed"))
 	recordFailed := func(reason string) {
 		meter.Count("payment.webhook.failed", 1, sentry.WithAttributes(
-			attribute.String("event", "checkout.session.completed"),
 			attribute.String("reason", reason),
 		))
 	}
-	meter.Count("payment.webhook.received", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("payment.webhook.received", 1)
 
 	var session checkoutSessionPayload
 	if err := json.Unmarshal(payload, &session); err != nil {
@@ -109,7 +109,6 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 	if markErr := s.orderStore.MarkPaid(ctx, orderID, paymentIntentID, customerEmail, customerName, shippingAddress); markErr != nil {
 		if errors.Is(markErr, db.ErrInvalidStatusTransition) {
 			meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
-				attribute.String("event", "checkout.session.completed"),
 				attribute.String("reason", "invalid_status_transition"),
 			))
 			logger.Info("ignoring checkout.session.completed due to state transition", "order_id", orderID, "session_id", session.ID, "error", markErr)
@@ -134,7 +133,6 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 	comment := "✅ Payment received! We’re preparing your order now."
 	if err := githubClient.CreateComment(ctx, repoFullName, issueNumber, comment); err != nil {
 		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
-			attribute.String("event", "checkout.session.completed"),
 			attribute.String("reason", "github_comment_failed"),
 		))
 		logger.Error("failed to create payment received comment", "error", err, "repo", repoFullName, "issue", issueNumber)
@@ -152,7 +150,6 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 
 	if err := s.sendOrderConfirmationEmail(ctx, shop, order, customerEmail, customerName, shippingAddress); err != nil {
 		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
-			attribute.String("event", "checkout.session.completed"),
 			attribute.String("reason", "email_confirmation_failed"),
 		))
 		logger.Error("failed to send order confirmation email", "error", err, "order_id", orderID)
@@ -170,7 +167,7 @@ func (s *StripeService) HandleCheckoutSessionCompleted(ctx context.Context, payl
 			}
 		}
 	}
-	meter.Count("payment.webhook.processed", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("payment.webhook.processed", 1)
 
 	return nil
 }
@@ -187,15 +184,14 @@ func (s *StripeService) HandleCheckoutSessionExpired(ctx context.Context, payloa
 	ctx = span.Context()
 
 	logger := s.loggerFromContext(ctx)
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
-	baseAttrs := []attribute.Builder{attribute.String("event", "checkout.session.expired")}
+	meter := observability.MeterFromContext(ctx)
+	meter.SetAttributes(attribute.String("event", "checkout.session.expired"))
 	recordFailed := func(reason string) {
 		meter.Count("payment.webhook.failed", 1, sentry.WithAttributes(
-			attribute.String("event", "checkout.session.expired"),
 			attribute.String("reason", reason),
 		))
 	}
-	meter.Count("payment.webhook.received", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("payment.webhook.received", 1)
 
 	var session checkoutSessionPayload
 	if err := json.Unmarshal(payload, &session); err != nil {
@@ -222,7 +218,6 @@ func (s *StripeService) HandleCheckoutSessionExpired(ctx context.Context, payloa
 	if markErr := s.orderStore.MarkExpired(ctx, order.ID); markErr != nil {
 		if errors.Is(markErr, db.ErrInvalidStatusTransition) {
 			meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
-				attribute.String("event", "checkout.session.expired"),
 				attribute.String("reason", "invalid_status_transition"),
 			))
 			logger.Info("ignoring checkout.session.expired due to state transition", "order_id", order.ID, "session_id", session.ID, "error", markErr)
@@ -246,7 +241,6 @@ func (s *StripeService) HandleCheckoutSessionExpired(ctx context.Context, payloa
 	githubClient := s.githubClient.WithInstallation(shop.GitHubInstallationID)
 	if err := githubClient.CreateComment(ctx, repoFullName, issueNumber, expireComment); err != nil {
 		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
-			attribute.String("event", "checkout.session.expired"),
 			attribute.String("reason", "github_comment_failed"),
 		))
 		logger.Error("failed to create expiration comment", "error", err, "repo", repoFullName, "issue", issueNumber)
@@ -260,7 +254,7 @@ func (s *StripeService) HandleCheckoutSessionExpired(ctx context.Context, payloa
 	s.deleteCheckoutLinkComments(ctx, githubClient, repoFullName, issueNumber)
 
 	logger.Info("checkout session expired handled", "order_id", orderID, "repo", repoFullName, "issue", issueNumber)
-	meter.Count("payment.webhook.processed", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("payment.webhook.processed", 1)
 	return nil
 }
 
@@ -276,15 +270,14 @@ func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload [
 	ctx = span.Context()
 
 	logger := s.loggerFromContext(ctx)
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
-	baseAttrs := []attribute.Builder{attribute.String("event", "payment_intent.payment_failed")}
+	meter := observability.MeterFromContext(ctx)
+	meter.SetAttributes(attribute.String("event", "payment_intent.payment_failed"))
 	recordFailed := func(reason string) {
 		meter.Count("payment.webhook.failed", 1, sentry.WithAttributes(
-			attribute.String("event", "payment_intent.payment_failed"),
 			attribute.String("reason", reason),
 		))
 	}
-	meter.Count("payment.webhook.received", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("payment.webhook.received", 1)
 
 	var intent stripeapi.PaymentIntent
 	if err := json.Unmarshal(payload, &intent); err != nil {
@@ -299,7 +292,6 @@ func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload [
 
 	if len(intent.Metadata) == 0 {
 		meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
-			attribute.String("event", "payment_intent.payment_failed"),
 			attribute.String("reason", "missing_metadata"),
 		))
 		logger.Info("payment intent missing metadata; skipping", "intent_id", intent.ID)
@@ -320,7 +312,6 @@ func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload [
 	if markErr := s.orderStore.MarkFailed(ctx, orderID, "payment_intent_failed"); markErr != nil {
 		if errors.Is(markErr, db.ErrInvalidStatusTransition) {
 			meter.Count("payment.webhook.ignored", 1, sentry.WithAttributes(
-				attribute.String("event", "payment_intent.payment_failed"),
 				attribute.String("reason", "invalid_status_transition"),
 			))
 			logger.Info("ignoring payment_intent.payment_failed due to state transition", "order_id", orderID, "intent_id", intent.ID, "error", markErr)
@@ -344,7 +335,6 @@ func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload [
 	githubClient := s.githubClient.WithInstallation(shop.GitHubInstallationID)
 	if err := githubClient.CreateComment(ctx, repoFullName, issueNumber, failComment); err != nil {
 		meter.Count("payment.side_effect.failed", 1, sentry.WithAttributes(
-			attribute.String("event", "payment_intent.payment_failed"),
 			attribute.String("reason", "github_comment_failed"),
 		))
 		logger.Error("failed to create payment failure comment", "error", err, "repo", repoFullName, "issue", issueNumber)
@@ -358,7 +348,7 @@ func (s *StripeService) HandlePaymentIntentFailed(ctx context.Context, payload [
 	s.deleteCheckoutLinkComments(ctx, githubClient, repoFullName, issueNumber)
 
 	logger.Info("payment failure handled", "order_id", orderID, "repo", repoFullName, "issue", issueNumber)
-	meter.Count("payment.webhook.processed", 1, sentry.WithAttributes(baseAttrs...))
+	meter.Count("payment.webhook.processed", 1)
 	return nil
 }
 

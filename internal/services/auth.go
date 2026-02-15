@@ -144,13 +144,11 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 	ctx = span.Context()
 
 	result := CompleteGitHubOAuthResult{}
-	meter := sentry.NewMeter(ctx).WithCtx(ctx)
-	meter.Count("auth.oauth.received", 1, sentry.WithAttributes(
-		attribute.String("source", "github_oauth"),
-	))
+	meter := observability.MeterFromContext(ctx)
+	meter.SetAttributes(attribute.String("source", "github_oauth"))
+	meter.Count("auth.oauth.received", 1)
 	recordFailed := func(reason string) {
 		meter.Count("auth.oauth.failed", 1, sentry.WithAttributes(
-			attribute.String("source", "github_oauth"),
 			attribute.String("reason", reason),
 		))
 	}
@@ -183,7 +181,6 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 	installationID, err := s.resolveAuthorizedInstallationID(ctx, token.AccessToken, input.PreferredInstallationIDs)
 	if err != nil {
 		meter.Count("auth.oauth.unresolved", 1, sentry.WithAttributes(
-			attribute.String("source", "github_oauth"),
 			attribute.String("reason", "installation_resolution_failed"),
 		))
 		result.ResolutionError = err
@@ -193,7 +190,6 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 	result.InstallationID = installationID
 	if installationID <= 0 {
 		meter.Count("auth.oauth.processed", 1, sentry.WithAttributes(
-			attribute.String("source", "github_oauth"),
 			attribute.String("outcome", "no_installations"),
 		))
 		return result, nil
@@ -202,7 +198,6 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 	shops, err := s.shopStore.GetConnectedShopsByInstallationID(ctx, installationID)
 	if err != nil {
 		meter.Count("auth.oauth.unresolved", 1, sentry.WithAttributes(
-			attribute.String("source", "github_oauth"),
 			attribute.String("reason", "shop_lookup_failed"),
 		))
 		result.ResolutionError = fmt.Errorf("failed to get shops for installation %d: %w", installationID, err)
@@ -223,7 +218,6 @@ func (s *AuthService) CompleteGitHubOAuth(ctx context.Context, input CompleteGit
 		outcome = "single_shop"
 	}
 	meter.Count("auth.oauth.processed", 1, sentry.WithAttributes(
-		attribute.String("source", "github_oauth"),
 		attribute.String("outcome", outcome),
 	))
 
