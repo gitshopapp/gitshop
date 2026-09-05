@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -39,6 +40,8 @@ type Handlers struct {
 	sessionManager       *session.Manager
 	adminService         *services.AdminService
 	logger               *slog.Logger
+	httpClient           *http.Client
+	umamiCache           *umamiScriptCache
 }
 
 type Dependencies struct {
@@ -56,6 +59,7 @@ type Dependencies struct {
 	SessionManager       *session.Manager
 	AdminService         *services.AdminService
 	Logger               *slog.Logger
+	HTTPClient           *http.Client
 }
 
 func New(deps Dependencies) (*Handlers, error) {
@@ -104,6 +108,13 @@ func New(deps Dependencies) (*Handlers, error) {
 		return nil, fmt.Errorf("handlers dependencies: stripeConnectService is required")
 	}
 
+	httpClient := deps.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Timeout: 10 * time.Second,
+		}
+	}
+
 	return &Handlers{
 		config:               deps.Config,
 		db:                   deps.DB,
@@ -119,6 +130,8 @@ func New(deps Dependencies) (*Handlers, error) {
 		sessionManager:       deps.SessionManager,
 		adminService:         deps.AdminService,
 		logger:               logger.With("component", "handlers"),
+		httpClient:           httpClient,
+		umamiCache:           &umamiScriptCache{},
 	}, nil
 }
 

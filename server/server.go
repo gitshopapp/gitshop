@@ -99,6 +99,7 @@ func (s *Server) buildRouter() *mux.Router {
 	r.HandleFunc("/privacy", h.PrivacyPolicy).Methods("GET").Name("legal.privacy")
 	r.HandleFunc("/webhooks/github", h.GitHubWebhook).Methods("POST").Name("webhooks.github")
 	r.HandleFunc("/webhooks/stripe", h.StripeWebhook).Methods("POST").Name("webhooks.stripe")
+	r.HandleFunc("/stats.js", h.UmamiScript).Methods("GET", "HEAD").Name("analytics.script")
 
 	// 404 handler - must be last
 	r.NotFoundHandler = h.AnalyticsContext(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
