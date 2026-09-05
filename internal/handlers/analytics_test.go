@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -39,6 +41,9 @@ func TestAnalyticsContext(t *testing.T) {
 		}
 		if captured.ScriptURL != "/stats.js" {
 			t.Errorf("ScriptURL = %q, want %q", captured.ScriptURL, "/stats.js")
+		}
+		if captured.HostURL != "/um" {
+			t.Errorf("HostURL = %q, want %q", captured.HostURL, "/um")
 		}
 		if !captured.Enabled() {
 			t.Errorf("expected Umami to be enabled")
@@ -154,5 +159,92 @@ func TestUmamiScript_ProxyAndCache(t *testing.T) {
 
 	if rec3.Code != http.StatusNotModified {
 		t.Fatalf("expected 304 Not Modified, got %d", rec3.Code)
+	}
+}
+
+func TestUmamiSend_NotFoundWhenUnconfigured(t *testing.T) {
+	t.Parallel()
+
+	h := &Handlers{
+		config: &config.Config{},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/um/api/send", strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+
+	h.UmamiSend(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestUmamiSend_ProxySuccess(t *testing.T) {
+	t.Parallel()
+
+	var receivedBody string
+	var receivedUA string
+	var receivedIP string
+	var receivedWebsiteID string
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/send" {
+			t.Errorf("unexpected upstream path: %s", r.URL.Path)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("failed to read request body: %v", err)
+		}
+		receivedBody = string(body)
+		receivedUA = r.Header.Get("User-Agent")
+		receivedIP = r.Header.Get("X-Forwarded-For")
+		receivedWebsiteID = r.Header.Get("x-umami-website-id")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("x-umami-cache", "cache-token-abc")
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(`{"cache":"cache-token-abc"}`)); err != nil {
+			t.Errorf("failed to write upstream response: %v", err)
+		}
+	}))
+	defer upstream.Close()
+
+	h := &Handlers{
+		config: &config.Config{
+			UmamiWebsiteID:  "site-123",
+			UmamiGatewayURL: upstream.URL,
+		},
+		httpClient: upstream.Client(),
+	}
+
+	payload := `{"type":"event","payload":{"website":"site-123","url":"/"}}`
+	req := httptest.NewRequest(http.MethodPost, "/um/api/send", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "TestBrowser/1.0")
+	req.Header.Set("X-Forwarded-For", "203.0.113.195")
+
+	rec := httptest.NewRecorder()
+	h.UmamiSend(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if rec.Body.String() != `{"cache":"cache-token-abc"}` {
+		t.Errorf("unexpected body: %s", rec.Body.String())
+	}
+	if rec.Header().Get("x-umami-cache") != "cache-token-abc" {
+		t.Errorf("unexpected x-umami-cache header: %s", rec.Header().Get("x-umami-cache"))
+	}
+	if receivedBody != payload {
+		t.Errorf("upstream received body = %q, want %q", receivedBody, payload)
+	}
+	if receivedUA != "TestBrowser/1.0" {
+		t.Errorf("upstream received UA = %q, want TestBrowser/1.0", receivedUA)
+	}
+	if receivedIP != "203.0.113.195" {
+		t.Errorf("upstream received IP = %q, want 203.0.113.195", receivedIP)
+	}
+	if receivedWebsiteID != "site-123" {
+		t.Errorf("upstream received website ID = %q, want site-123", receivedWebsiteID)
 	}
 }

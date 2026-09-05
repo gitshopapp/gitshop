@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -14,8 +15,11 @@ import (
 )
 
 const defaultUmamiScriptURL = "https://cloud.umami.is/script.js"
+const defaultUmamiGatewayURL = "https://gateway.umami.is"
 const umamiScriptTTL = 1 * time.Hour
 const umamiProxyPath = "/stats.js"
+const umamiHostURL = "/um"
+const maxUmamiPayloadBytes = 64 * 1024 // 64 KB
 
 type umamiScriptCache struct {
 	mu        sync.RWMutex
@@ -32,13 +36,16 @@ func (h *Handlers) AnalyticsContext(next http.Handler) http.Handler {
 	}
 
 	scriptURL := ""
+	hostURL := ""
 	if websiteID != "" {
 		scriptURL = umamiProxyPath
+		hostURL = umamiHostURL
 	}
 
 	umamiCfg := utils.UmamiConfig{
 		WebsiteID: websiteID,
 		ScriptURL: scriptURL,
+		HostURL:   hostURL,
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +86,103 @@ func (h *Handlers) UmamiScript(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(content); err != nil {
 		h.loggerFromContext(r.Context()).Error("failed to write umami script response", "error", err)
+	}
+}
+
+// UmamiSend proxies analytics collection events to the upstream Umami gateway.
+func (h *Handlers) UmamiSend(w http.ResponseWriter, r *http.Request) {
+	if h.config == nil || strings.TrimSpace(h.config.UmamiWebsiteID) == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	gatewayURL := defaultUmamiGatewayURL
+	if h.config != nil && strings.TrimSpace(h.config.UmamiGatewayURL) != "" {
+		gatewayURL = strings.TrimSpace(h.config.UmamiGatewayURL)
+	}
+	upstreamURL := strings.TrimRight(gatewayURL, "/") + "/api/send"
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxUmamiPayloadBytes))
+	if err != nil {
+		h.loggerFromContext(r.Context()).Warn("failed to read umami send body", "error", err)
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		h.loggerFromContext(r.Context()).Error("failed to create upstream umami send request", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if ua := r.Header.Get("User-Agent"); ua != "" {
+		req.Header.Set("User-Agent", ua)
+	}
+
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.Header.Get("X-Real-IP")
+	}
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+	}
+	if clientIP != "" {
+		req.Header.Set("X-Forwarded-For", clientIP)
+	}
+
+	if wid := r.Header.Get("x-umami-website-id"); wid != "" {
+		req.Header.Set("x-umami-website-id", wid)
+	} else if h.config != nil && h.config.UmamiWebsiteID != "" {
+		req.Header.Set("x-umami-website-id", h.config.UmamiWebsiteID)
+	}
+
+	if host := r.Header.Get("x-umami-hostname"); host != "" {
+		req.Header.Set("x-umami-hostname", host)
+	}
+	if cacheVal := r.Header.Get("x-umami-cache"); cacheVal != "" {
+		req.Header.Set("x-umami-cache", cacheVal)
+	}
+
+	client := h.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		h.loggerFromContext(r.Context()).Error("failed to proxy umami send request", "error", err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && h.logger != nil {
+			h.logger.Warn("failed to close upstream umami send response body", "error", closeErr)
+		}
+	}()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxUmamiPayloadBytes))
+	if err != nil {
+		h.loggerFromContext(r.Context()).Error("failed to read upstream umami send response", "error", err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		return
+	}
+
+	if cacheVal := resp.Header.Get("x-umami-cache"); cacheVal != "" {
+		w.Header().Set("x-umami-cache", cacheVal)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	if len(respBody) > 0 {
+		if _, writeErr := w.Write(respBody); writeErr != nil {
+			h.loggerFromContext(r.Context()).Error("failed to write umami send response", "error", writeErr)
+		}
 	}
 }
 

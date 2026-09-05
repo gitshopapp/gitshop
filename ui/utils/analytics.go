@@ -6,6 +6,7 @@ import "context"
 type UmamiConfig struct {
 	WebsiteID string
 	ScriptURL string
+	HostURL   string
 }
 
 // Enabled reports whether Umami analytics is configured with a valid website ID and script URL.

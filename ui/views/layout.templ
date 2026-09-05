@@ -42,7 +42,11 @@ templ Layout(props LayoutProps, children ...templ.Component) {
 			<link rel="apple-touch-icon" href={ templ.SafeURL(utils.ScriptURL("/assets/img/favicon-32.png")) }/>
 			<link rel="stylesheet" href={ templ.SafeURL(utils.ScriptURL("/assets/css/app.css")) }/>
 			if umami := utils.UmamiFromContext(ctx); umami.Enabled() {
-				<script defer src={ templ.SafeURL(umami.ScriptURL) } data-website-id={ umami.WebsiteID }></script>
+				if umami.HostURL != "" {
+					<script defer src={ templ.SafeURL(umami.ScriptURL) } data-website-id={ umami.WebsiteID } data-host-url={ umami.HostURL }></script>
+				} else {
+					<script defer src={ templ.SafeURL(umami.ScriptURL) } data-website-id={ umami.WebsiteID }></script>
+				}
 			}
 		</head>
 		<body class="min-h-screen bg-background text-foreground antialiased">

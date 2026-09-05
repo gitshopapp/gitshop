@@ -59,7 +59,7 @@ func TestUmamiFromContext(t *testing.T) {
 		t.Errorf("expected empty config from empty context, got %v", got)
 	}
 
-	cfg := UmamiConfig{WebsiteID: "abc-123", ScriptURL: "https://cloud.umami.is/script.js"}
+	cfg := UmamiConfig{WebsiteID: "abc-123", ScriptURL: "https://cloud.umami.is/script.js", HostURL: "/um"}
 	ctxWithCfg := WithUmamiConfig(ctx, cfg)
 	if got := UmamiFromContext(ctxWithCfg); got != cfg {
 		t.Errorf("UmamiFromContext() = %v, want %v", got, cfg)

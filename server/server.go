@@ -100,6 +100,8 @@ func (s *Server) buildRouter() *mux.Router {
 	r.HandleFunc("/webhooks/github", h.GitHubWebhook).Methods("POST").Name("webhooks.github")
 	r.HandleFunc("/webhooks/stripe", h.StripeWebhook).Methods("POST").Name("webhooks.stripe")
 	r.HandleFunc("/stats.js", h.UmamiScript).Methods("GET", "HEAD").Name("analytics.script")
+	r.HandleFunc("/um/script.js", h.UmamiScript).Methods("GET", "HEAD").Name("analytics.script_um")
+	r.HandleFunc("/um/api/send", h.UmamiSend).Methods("POST").Name("analytics.send")
 
 	// 404 handler - must be last
 	r.NotFoundHandler = h.AnalyticsContext(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

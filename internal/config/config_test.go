@@ -216,6 +216,9 @@ func TestLoadParsesUppercaseLogLevel(t *testing.T) {
 	if cfg.UmamiScriptURL != "https://cloud.umami.is/script.js" {
 		t.Fatalf("expected default umami script url, got %q", cfg.UmamiScriptURL)
 	}
+	if cfg.UmamiGatewayURL != "https://gateway.umami.is" {
+		t.Fatalf("expected default umami gateway url, got %q", cfg.UmamiGatewayURL)
+	}
 	if cfg.UmamiWebsiteID != "" {
 		t.Fatalf("expected default empty umami website id, got %q", cfg.UmamiWebsiteID)
 	}
@@ -234,6 +237,24 @@ func TestValidateUmamiScriptURL(t *testing.T) {
 	}
 
 	cfg.UmamiScriptURL = "https://analytics.example.com/script.js"
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("expected valid config, got %v", err)
+	}
+}
+
+func TestValidateUmamiGatewayURL(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.UmamiWebsiteID = "website-123"
+	cfg.UmamiGatewayURL = "not-a-valid-url"
+
+	err := cfg.validate()
+	if err == nil {
+		t.Fatalf("expected error for invalid umami gateway url, got nil")
+	}
+
+	cfg.UmamiGatewayURL = "https://gateway.example.com"
 	if err := cfg.validate(); err != nil {
 		t.Fatalf("expected valid config, got %v", err)
 	}
