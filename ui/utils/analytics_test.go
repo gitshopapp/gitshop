@@ -49,7 +49,8 @@ func TestUmamiConfig_Enabled(t *testing.T) {
 func TestUmamiFromContext(t *testing.T) {
 	t.Parallel()
 
-	if got := UmamiFromContext(nil); got.Enabled() {
+	var nilCtx context.Context
+	if got := UmamiFromContext(nilCtx); got.Enabled() {
 		t.Errorf("expected empty config from nil context, got %v", got)
 	}
 

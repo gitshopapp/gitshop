@@ -238,4 +238,3 @@ func TestValidateUmamiScriptURL(t *testing.T) {
 		t.Fatalf("expected valid config, got %v", err)
 	}
 }
-
