@@ -41,6 +41,9 @@ type Config struct {
 	SentryTracesSampleRate float64 `env:"SENTRY_TRACES_SAMPLE_RATE" envDefault:"0.2" validate:"gte=0,lte=1"`
 	SentryRelease          string  `env:"SENTRY_RELEASE"`
 	RenderGitCommit        string  `env:"RENDER_GIT_COMMIT"`
+
+	UmamiWebsiteID string `env:"UMAMI_WEBSITE_ID"`
+	UmamiScriptURL string `env:"UMAMI_SCRIPT_URL" envDefault:"https://cloud.umami.is/script.js" validate:"omitempty,url"`
 }
 
 var configValidator = validator.New()
@@ -62,6 +65,10 @@ func Load() (*Config, error) {
 func (c *Config) validate() error {
 	if err := configValidator.Struct(c); err != nil {
 		return err
+	}
+
+	if strings.TrimSpace(c.UmamiWebsiteID) != "" && strings.TrimSpace(c.UmamiScriptURL) == "" {
+		c.UmamiScriptURL = "https://cloud.umami.is/script.js"
 	}
 
 	hasGitHubClientID := strings.TrimSpace(c.GitHubClientID) != ""

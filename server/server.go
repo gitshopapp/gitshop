@@ -92,6 +92,7 @@ func (s *Server) buildRouter() *mux.Router {
 	r.Use(h.MetricsContext)
 	r.Use(h.RequestLogger)
 	r.Use(h.SecurityHeaders)
+	r.Use(h.AnalyticsContext)
 	r.HandleFunc("/", h.Root).Methods("GET").Name("root")
 	r.HandleFunc("/health", h.Health).Methods("GET").Name("health")
 	r.HandleFunc("/terms", h.TermsOfUse).Methods("GET").Name("legal.terms")
@@ -100,12 +101,12 @@ func (s *Server) buildRouter() *mux.Router {
 	r.HandleFunc("/webhooks/stripe", h.StripeWebhook).Methods("POST").Name("webhooks.stripe")
 
 	// 404 handler - must be last
-	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	r.NotFoundHandler = h.AnalyticsContext(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		if err := views.NotFoundPage().Render(r.Context(), w); err != nil {
 			http.Error(w, "Not Found", http.StatusNotFound)
 		}
-	})
+	}))
 
 	// Static assets - must be before admin router
 	r.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.FS(uiassets.FS)))).Name("assets")

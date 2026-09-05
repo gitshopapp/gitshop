@@ -213,4 +213,29 @@ func TestLoadParsesUppercaseLogLevel(t *testing.T) {
 	if cfg.SentryTracesSampleRate != 0.2 {
 		t.Fatalf("expected default sentry traces sample rate, got %v", cfg.SentryTracesSampleRate)
 	}
+	if cfg.UmamiScriptURL != "https://cloud.umami.is/script.js" {
+		t.Fatalf("expected default umami script url, got %q", cfg.UmamiScriptURL)
+	}
+	if cfg.UmamiWebsiteID != "" {
+		t.Fatalf("expected default empty umami website id, got %q", cfg.UmamiWebsiteID)
+	}
 }
+
+func TestValidateUmamiScriptURL(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.UmamiWebsiteID = "website-123"
+	cfg.UmamiScriptURL = "not-a-valid-url"
+
+	err := cfg.validate()
+	if err == nil {
+		t.Fatalf("expected error for invalid umami script url, got nil")
+	}
+
+	cfg.UmamiScriptURL = "https://analytics.example.com/script.js"
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("expected valid config, got %v", err)
+	}
+}
+
